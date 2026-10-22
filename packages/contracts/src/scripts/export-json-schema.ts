@@ -3,6 +3,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { z } from "zod";
+import { AskResponse, RouteListResponse, SearchResponse, StoreInsights } from "../assist.js";
 import { AddItemRequest, CartSnapshot, PairCartRequest } from "../cart.js";
 import { SmartCartEvent } from "../events.js";
 import { CheckoutResponse, ExitCheckResponse, Receipt } from "../order.js";
@@ -18,6 +19,10 @@ const schemas = {
   Receipt,
   CheckoutResponse,
   ExitCheckResponse,
+  SearchResponse,
+  RouteListResponse,
+  AskResponse,
+  StoreInsights,
 };
 for (const [name, schema] of Object.entries(schemas)) {
   const json = z.toJSONSchema(schema, { io: "input", unrepresentable: "any" });

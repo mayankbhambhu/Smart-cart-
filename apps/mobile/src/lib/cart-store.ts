@@ -3,6 +3,7 @@ import * as Crypto from "expo-crypto";
 import { create } from "zustand";
 import { api, type LineChange } from "./api";
 import { tokenFor, useAuth } from "./auth-store";
+import { useAssist } from "./assist-store";
 import { applyEvent, withLine } from "./cart-logic";
 import { connectCart } from "./realtime";
 
@@ -38,6 +39,7 @@ export const useCart = create<CartState>((set, get) => {
   const open = (cart: CartSnapshot) => {
     disconnect?.();
     set({ cart, live: false, endedReason: null });
+    useAssist.getState().setStoreId(cart.storeId);
     const session = useAuth.getState().session;
     if (!session) return;
     disconnect = connectCart({
@@ -49,6 +51,7 @@ export const useCart = create<CartState>((set, get) => {
         if (outcome.kind === "cart") set({ cart: outcome.cart });
         if (outcome.kind === "ended") close(outcome.reason);
         if (outcome.kind === "paid") get().markPaid(outcome.orderId);
+        if (outcome.kind === "help") useAssist.getState().setHelp(outcome.request);
       },
     });
   };

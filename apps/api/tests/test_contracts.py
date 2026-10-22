@@ -45,3 +45,29 @@ def test_requests_the_app_sends_are_valid() -> None:
         "AddItemRequest",
         {"barcode": "2000000000015", "qty": 1, "requestId": "6f1c1d1e-0000-4000-8000-000000000001"},
     )
+
+
+@pytest.mark.integration
+async def test_find_it_fast_responses_match_the_contract(api: Api, server: Server, dal: Item) -> None:
+    base = "/v1/stores/S-01"
+    check("SearchResponse", (await api.http.get(f"{base}/products/search", params={"q": "dal"})).json())
+    route = await api.http.post(f"{base}/lists/route", json={"lines": ["milk", "atta", "unicorn"]})
+    check("RouteListResponse", route.json())
+
+    auth = shopper()
+    ask = await api.http.post(
+        f"{base}/assistant", headers={"authorization": auth}, json={"message": "toor dal?"}
+    )
+    check("AskResponse", ask.json())
+    insights = await api.http.get(
+        f"/admin{base}/insights", headers={"authorization": "Bearer dev:staff-demo"}
+    )
+    check("StoreInsights", insights.json())
+
+    session_id = await api.session(auth)
+    await api.add(auth, session_id, dal.code)
+    async with connected(server, auth) as phone:
+        await phone.join(room="cart", sessionId=session_id)
+        await phone.next("cart.snapshot")
+        await api.http.post(f"{base}/help", headers={"authorization": auth}, json={"topic": "stock"})
+        check("SmartCartEvent", await phone.next("help.requested"))

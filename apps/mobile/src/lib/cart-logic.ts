@@ -1,4 +1,4 @@
-import type { CartLine, CartSnapshot, CartTotals, SmartCartEvent } from "@smart-cart/contracts";
+import type { CartLine, CartSnapshot, CartTotals, HelpRequest, SmartCartEvent } from "@smart-cart/contracts";
 
 /** Replaces, adds or removes one line, taking the server's totals as they are. */
 export function withLine(
@@ -17,6 +17,7 @@ export type CartEventOutcome =
   | { kind: "cart"; cart: CartSnapshot }
   | { kind: "ended"; reason: string }
   | { kind: "paid"; orderId: string }
+  | { kind: "help"; request: HelpRequest }
   | { kind: "ignore" };
 
 /** How a server event changes the shopper's cart. Pure, so it is easy to test. */
@@ -36,6 +37,9 @@ export function applyEvent(cart: CartSnapshot | null, event: SmartCartEvent): Ca
     case "order.paid":
       if (!cart || event.data.sessionId !== cart.sessionId) return { kind: "ignore" };
       return { kind: "paid", orderId: event.data.orderId };
+    case "help.requested":
+    case "help.updated":
+      return { kind: "help", request: event.data };
     case "cart.session_ended":
       if (!cart || event.data.sessionId !== cart.sessionId) return { kind: "ignore" };
       return { kind: "ended", reason: event.data.reason };

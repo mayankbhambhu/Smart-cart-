@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { HelpRequest } from "./assist.js";
 import { CartLine, CartSnapshot, CartTotals } from "./cart.js";
 
 /**
@@ -69,6 +70,10 @@ export const InventoryLowStockEvent = envelope(
     threshold: z.number().int(),
   }),
 );
+/** A shopper tapped "Call for help"; sent to staff screens and the shopper's own cart room. */
+export const HelpRequestedEvent = envelope("help.requested", HelpRequest);
+/** Staff acknowledged or resolved it, or the shopper cancelled. */
+export const HelpUpdatedEvent = envelope("help.updated", HelpRequest);
 
 export const SmartCartEvent = z.discriminatedUnion("type", [
   CartSnapshotEvent,
@@ -80,6 +85,8 @@ export const SmartCartEvent = z.discriminatedUnion("type", [
   OrderPaidEvent,
   InventoryUpdatedEvent,
   InventoryLowStockEvent,
+  HelpRequestedEvent,
+  HelpUpdatedEvent,
 ]);
 export type SmartCartEvent = z.infer<typeof SmartCartEvent>;
 export type SmartCartEventType = SmartCartEvent["type"];

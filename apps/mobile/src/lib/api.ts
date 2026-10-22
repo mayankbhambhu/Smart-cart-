@@ -1,4 +1,17 @@
-import type { CartLine, CartSnapshot, CartTotals, CheckoutResponse, Receipt } from "@smart-cart/contracts";
+import type {
+  AskResponse,
+  CartLine,
+  CartSnapshot,
+  CartTotals,
+  ChatTurn,
+  CheckoutResponse,
+  DietTag,
+  HelpRequest,
+  HelpTopic,
+  Receipt,
+  RouteListResponse,
+  SearchResponse,
+} from "@smart-cart/contracts";
 import { API_URL } from "./config";
 
 /** An error response from the API, with its machine-readable code ("cart_in_use", ...). */
@@ -83,4 +96,21 @@ export const api = {
   /** Only when the API runs with PAYMENT_PROVIDER=fake (development and demos). */
   payFake: (orderId: string) => request<Receipt>("POST", `/v1/orders/${orderId}/pay/fake`, {}),
   myOrders: () => request<{ orders: Receipt[] }>("GET", "/v1/me/orders").then((r) => r.orders),
+
+  // ---- Find it fast (milestone 4) ----
+  search: (storeId: string, q: string, diet: DietTag[] = []) => {
+    const params = new URLSearchParams({ q });
+    diet.forEach((d) => params.append("diet", d));
+    return request<SearchResponse>("GET", `/v1/stores/${storeId}/products/search?${params}`).then((r) => r.results);
+  },
+  routeList: (storeId: string, lines: string[]) =>
+    request<RouteListResponse>("POST", `/v1/stores/${storeId}/lists/route`, { lines }),
+  ask: (storeId: string, message: string, history: ChatTurn[]) =>
+    request<AskResponse>("POST", `/v1/stores/${storeId}/assistant`, { message, history }),
+  requestHelp: (storeId: string, topic: HelpTopic, note?: string) =>
+    request<HelpRequest>("POST", `/v1/stores/${storeId}/help`, { topic, note: note || null }),
+  myHelp: (storeId: string) =>
+    request<{ request: HelpRequest | null }>("GET", `/v1/stores/${storeId}/help/mine`).then((r) => r.request),
+  cancelHelp: (storeId: string, id: string) =>
+    request<HelpRequest>("POST", `/v1/stores/${storeId}/help/${id}`, { action: "cancel" }),
 };

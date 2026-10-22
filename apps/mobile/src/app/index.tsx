@@ -3,7 +3,10 @@ import { router } from "expo-router";
 import { useEffect } from "react";
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { Button } from "../components/Button";
+import { FindItFast } from "../components/FindItFast";
+import { HelpBanner } from "../components/HelpBanner";
 import { api } from "../lib/api";
+import { useAssist } from "../lib/assist-store";
 import { useAuth } from "../lib/auth-store";
 import { useCart } from "../lib/cart-store";
 import { formatInr } from "../lib/money";
@@ -27,6 +30,11 @@ export default function HomeScreen() {
     useCart
       .getState()
       .resume()
+      .catch(() => {});
+    void useAssist.getState().loadBudget();
+    useAssist
+      .getState()
+      .refreshHelp()
       .catch(() => {});
   }, []);
 
@@ -65,6 +73,10 @@ export default function HomeScreen() {
           )}
         </>
       )}
+
+      <Text style={styles.section}>Find it fast</Text>
+      <FindItFast />
+      <HelpBanner />
 
       {receipts.data && receipts.data.length > 0 && (
         <>
