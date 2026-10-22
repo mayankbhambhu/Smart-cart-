@@ -10,9 +10,10 @@
     "lint": "pnpm -r lint",
     "test": "pnpm -r test",
     "typecheck": "pnpm -r typecheck",
-    "dev:api": "pnpm --filter @smart-cart/api dev",
+    "dev:api": "cd apps/api && uv run python -m smartcart.main",
     "dev:dashboard": "pnpm --filter @smart-cart/dashboard dev",
-    "db:migrate": "pnpm --filter @smart-cart/api db:migrate",
-    "db:seed": "pnpm --filter @smart-cart/api db:seed"
+    "db:migrate": "cd apps/api && uv run alembic upgrade head",
+    "db:seed": "cd apps/api && uv run python -m smartcart.seed",
+    "test:api": "cd apps/api && uv run pytest"
   }
 }

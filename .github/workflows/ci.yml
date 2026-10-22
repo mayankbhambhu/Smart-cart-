@@ -10,8 +10,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  node:
-    name: API, contracts and dashboard
+  api:
+    name: API (Python)
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -29,8 +29,52 @@ jobs:
         options: >-
           --health-cmd "redis-cli ping" --health-interval 5s --health-retries 10
     env:
-      DATABASE_URL: postgresql://smartcart:smartcart@localhost:5432/smartcart?schema=public
+      DATABASE_URL: postgresql://smartcart:smartcart@localhost:5432/smartcart
       REDIS_URL: redis://localhost:6379
+      AUTH_MODE: dev
+      ENV: test
+    defaults:
+      run:
+        working-directory: apps/api
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.12"
+          enable-cache: true
+      - run: uv sync --locked
+      - run: uv run ruff check .
+      - run: uv run ruff format --check .
+      - run: uv run mypy src tests migrations
+      - run: uv run alembic upgrade head
+      - name: Models match the migrations
+        run: uv run alembic check
+      - run: uv run python -m smartcart.seed
+      - name: Seed is safe to re-run
+        run: uv run python -m smartcart.seed
+      - run: uv run pytest -v
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+        working-directory: .
+      - run: pnpm --filter @smart-cart/contracts build
+        working-directory: .
+      - name: Mobile app smoke test against the API
+        run: |
+          # Run from .venv rather than `uv run` so the server holds no uv cache lock,
+          # which would stall setup-uv's post-job cache prune.
+          .venv/bin/python -m smartcart.main > api.log 2>&1 &
+          API_PID=$!
+          trap 'kill $API_PID' EXIT
+          for i in $(seq 1 30); do curl -sf localhost:4000/readyz && break; sleep 1; done
+          EXPO_PUBLIC_API_URL=http://localhost:4000 pnpm --filter @smart-cart/mobile smoke || { cat api.log; exit 1; }
+
+  web:
+    name: Contracts and dashboard
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -42,29 +86,26 @@ jobs:
       - run: pnpm --filter @smart-cart/contracts build
       - name: Contract JSON Schemas are up to date
         run: git diff --exit-code packages/contracts/schema
-      - run: pnpm --filter @smart-cart/api db:generate
-      - run: pnpm --filter @smart-cart/api exec prisma migrate deploy
-      - run: pnpm --filter @smart-cart/api db:seed
       - run: pnpm typecheck
       - run: pnpm test
-      - run: pnpm --filter @smart-cart/api build
       - run: pnpm --filter @smart-cart/dashboard build
 
   mobile:
-    name: Flutter app
+    name: React Native app
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: apps/mobile
     steps:
       - uses: actions/checkout@v4
-      - uses: subosito/flutter-action@v2
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
         with:
-          channel: stable
-          cache: true
-      - run: flutter pub get
-      - run: flutter analyze
-      - run: flutter test
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @smart-cart/contracts build
+      - run: pnpm --filter @smart-cart/mobile typecheck
+      - run: pnpm --filter @smart-cart/mobile test
+      - name: Bundle for Android and iOS
+        run: pnpm --filter @smart-cart/mobile export:check
 
   terraform:
     name: Terraform (validate only, never applies)
