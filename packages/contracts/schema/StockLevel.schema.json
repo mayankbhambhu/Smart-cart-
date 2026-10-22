@@ -1,0 +1,58 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "productId": {
+      "type": "string"
+    },
+    "barcode": {
+      "type": "string"
+    },
+    "name": {
+      "type": "string"
+    },
+    "onHand": {
+      "type": "integer",
+      "minimum": -9007199254740991,
+      "maximum": 9007199254740991
+    },
+    "reserved": {
+      "type": "integer",
+      "minimum": -9007199254740991,
+      "maximum": 9007199254740991
+    },
+    "available": {
+      "type": "integer",
+      "minimum": -9007199254740991,
+      "maximum": 9007199254740991
+    },
+    "lowStockThreshold": {
+      "type": "integer",
+      "minimum": -9007199254740991,
+      "maximum": 9007199254740991
+    },
+    "aisle": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "shelf": {
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  },
+  "required": [
+    "productId",
+    "barcode",
+    "name",
+    "onHand",
+    "reserved",
+    "available",
+    "lowStockThreshold",
+    "aisle",
+    "shelf"
+  ]
+}

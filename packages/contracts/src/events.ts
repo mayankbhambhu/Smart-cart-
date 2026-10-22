@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { HelpRequest } from "./assist.js";
 import { CartLine, CartSnapshot, CartTotals } from "./cart.js";
+import { Reservation } from "./store.js";
 
 /**
  * Who produced the event. In V1 only the phone produces cart events;
@@ -75,6 +76,13 @@ export const HelpRequestedEvent = envelope("help.requested", HelpRequest);
 /** Staff acknowledged or resolved it, or the shopper cancelled. */
 export const HelpUpdatedEvent = envelope("help.updated", HelpRequest);
 
+/** A shopper reserved items; sent to the store room for the pick list and reservations board. */
+export const ReservationCreatedEvent = envelope("reservation.created", Reservation);
+/** Picked, collected, cancelled or expired. */
+export const ReservationUpdatedEvent = envelope("reservation.updated", Reservation);
+/** Tasks changed; screens refetch. taskId is null when several changed at once. */
+export const TaskUpdatedEvent = envelope("task.updated", z.object({ taskId: z.string().nullable() }));
+
 export const SmartCartEvent = z.discriminatedUnion("type", [
   CartSnapshotEvent,
   CartItemAddedEvent,
@@ -87,6 +95,9 @@ export const SmartCartEvent = z.discriminatedUnion("type", [
   InventoryLowStockEvent,
   HelpRequestedEvent,
   HelpUpdatedEvent,
+  ReservationCreatedEvent,
+  ReservationUpdatedEvent,
+  TaskUpdatedEvent,
 ]);
 export type SmartCartEvent = z.infer<typeof SmartCartEvent>;
 export type SmartCartEventType = SmartCartEvent["type"];

@@ -380,6 +380,8 @@ class StoreOps:
             event(type_, store_id=wire["storeId"], cart_id=wire["cartCode"], source="system", data=wire),
             [store_room(wire["storeId"])],
         )
+        # Every reservation change opens, finishes or cancels its pick (or put-back) task.
+        await self._task_event(wire["storeId"], None)
 
     async def _stock_changed(self, db: AsyncSession, store_id: str, product_ids: list[str]) -> None:
         for r in await db.scalars(
