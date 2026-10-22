@@ -1,0 +1,59 @@
+import type { CartLine, CartSnapshot, CartTotals, SmartCartEvent } from "@smart-cart/contracts";
+import { applyEvent, withLine } from "../cart-logic";
+
+const line = (productId: string, name: string, qty: number): CartLine => ({
+  productId,
+  name,
+  brand: null,
+  imageUrl: null,
+  qty,
+  unitPricePaise: 100,
+  gstRateBp: 500,
+  lineTotalPaise: qty * 100,
+  lineTaxPaise: 5 * qty,
+});
+const totals = (totalPaise: number): CartTotals => ({ totalPaise, taxPaise: 0, subtotalPaise: totalPaise, itemCount: 1 });
+const cart: CartSnapshot = {
+  sessionId: "s1",
+  cartCode: "C-0042",
+  storeId: "S-01",
+  status: "active",
+  lines: [line("a", "Atta", 1)],
+  totals: totals(100),
+  updatedAt: new Date().toISOString(),
+};
+const envelope = { eventId: "e", storeId: "S-01", cartId: "C-0042", source: "phone" as const, occurredAt: "" };
+
+test("withLine replaces, adds and removes lines, keeping the server totals", () => {
+  let c = withLine(cart, "a", line("a", "Atta", 2), totals(999));
+  expect(c.lines[0]!.qty).toBe(2);
+  expect(c.totals.totalPaise).toBe(999); // never summed on the phone
+  c = withLine(c, "b", line("b", "Butter", 1), totals(999));
+  expect(c.lines.map((l) => l.name)).toEqual(["Atta", "Butter"]);
+  c = withLine(c, "a", null, totals(100));
+  expect(c.lines.map((l) => l.productId)).toEqual(["b"]);
+});
+
+test("a snapshot replaces the local cart (how reconnects resync)", () => {
+  const fresh = { ...cart, lines: [] };
+  const out = applyEvent(cart, { ...envelope, type: "cart.snapshot", data: fresh } as SmartCartEvent);
+  expect(out).toEqual({ kind: "cart", cart: fresh });
+});
+
+test("adds from the cart hardware apply exactly like adds from the phone", () => {
+  const event = {
+    ...envelope,
+    source: "cart",
+    type: "cart.item_added",
+    data: { sessionId: "s1", line: line("b", "Butter", 1), totals: totals(200) },
+  } as SmartCartEvent;
+  const out = applyEvent(cart, event);
+  expect(out.kind === "cart" && out.cart.lines.map((l) => l.productId)).toEqual(["a", "b"]);
+});
+
+test("ignores events for another session and reports the session ending", () => {
+  const other = { ...envelope, type: "cart.item_removed", data: { sessionId: "zz", productId: "a", line: null, totals: totals(0) } };
+  expect(applyEvent(cart, other as SmartCartEvent)).toEqual({ kind: "ignore" });
+  const ended = { ...envelope, type: "cart.session_ended", data: { sessionId: "s1", reason: "abandoned" } };
+  expect(applyEvent(cart, ended as SmartCartEvent)).toEqual({ kind: "ended", reason: "abandoned" });
+});
