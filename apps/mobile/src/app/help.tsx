@@ -19,9 +19,15 @@ export default function HelpScreen() {
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
 
+  const active = help && (help.status === "open" || help.status === "acknowledged");
+
+  // Live help events come over the cart connection; a shopper without a cart gets updates by polling.
   useEffect(() => {
     refreshHelp().catch(() => {});
-  }, [refreshHelp]);
+    if (!active) return;
+    const timer = setInterval(() => refreshHelp().catch(() => {}), 5_000);
+    return () => clearInterval(timer);
+  }, [refreshHelp, active]);
 
   const run = (fn: () => Promise<unknown>) => async () => {
     setBusy(true);
@@ -34,7 +40,6 @@ export default function HelpScreen() {
     }
   };
 
-  const active = help && (help.status === "open" || help.status === "acknowledged");
   if (active) {
     return (
       <View style={styles.body}>

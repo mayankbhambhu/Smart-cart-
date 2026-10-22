@@ -215,7 +215,8 @@ class AssistService:
     async def route_list(self, db: AsyncSession, store_id: str, lines: list[str]) -> dict[str, Any]:
         """Turns a typed or pasted shopping list into a walking route, aisle by aisle (US-01, US-06).
 
-        Each line gets the best match: in stock first, then the lowest unit price. Lines with no match
+        Each line gets the best match: in stock first, then the pack size the line names ("atta 5 kg"),
+        then the lowest unit price. Lines with no match
         are returned as notFound rather than swapped for something else.
         """
         cleaned = [ln.strip() for ln in lines if ln.strip()][:60]
@@ -231,7 +232,15 @@ class AssistService:
             if not matches:
                 not_found.append(line)
                 continue
-            best = min(matches, key=lambda m: (_STOCK_RANK[m["stock"]], m["unitPricePaise"] or 1 << 30))
+            wanted = pack_size(line)
+            best = min(
+                matches,
+                key=lambda m: (
+                    _STOCK_RANK[m["stock"]],
+                    wanted is not None and pack_size(m["name"]) != wanted,
+                    m["unitPricePaise"] or 1 << 30,
+                ),
+            )
             picked.append({"line": line, "product": best, "alternatives": len(matches) - 1})
 
         picked.sort(key=lambda p: aisle_key(p["product"]["aisle"], p["product"]["shelf"]))

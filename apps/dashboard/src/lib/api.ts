@@ -84,3 +84,12 @@ export type OrderRow = {
   exitUsedAt: string | null;
   createdAt: string;
 };
+
+/** Open help requests, shared by the nav badge, the alert bar and the Help page. */
+export const helpQuery = (openOnly: boolean) => ({
+  queryKey: ["help", STORE_ID, openOnly ? "open" : "day"],
+  queryFn: () =>
+    apiGet<{ requests: import("@smart-cart/contracts").HelpRequest[] }>(
+      `/admin/v1/stores/${STORE_ID}/help?openOnly=${openOnly}`,
+    ).then((r) => r.requests),
+});

@@ -45,7 +45,7 @@ export default function HomeScreen() {
       {cart ? (
         <Pressable accessibilityRole="button" onPress={() => router.push("/cart")} style={styles.resume}>
           <Text style={styles.resumeTitle}>Continue with cart {cart.cartCode}</Text>
-          <Text style={styles.muted}>{cart.totals.itemCount} items</Text>
+          <Text style={styles.muted}>{cart.totals.itemCount} {cart.totals.itemCount === 1 ? "item" : "items"}</Text>
         </Pressable>
       ) : (
         <>
@@ -92,7 +92,7 @@ export default function HomeScreen() {
                 <Text style={styles.storeName}>{formatInr(r.totals.totalPaise)}</Text>
                 <Text style={styles.muted}>
                   {new Date(r.createdAt).toLocaleDateString("en-IN", { day: "numeric", month: "short" })} ·{" "}
-                  {r.totals.itemCount} items
+                  {r.totals.itemCount} {r.totals.itemCount === 1 ? "item" : "items"}
                 </Text>
               </View>
               <Text style={styles.start}>Receipt ›</Text>

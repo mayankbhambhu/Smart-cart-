@@ -12,7 +12,7 @@ import type {
   RouteListResponse,
   SearchResponse,
 } from "@smart-cart/contracts";
-import { API_URL } from "./config";
+import { API_URL, DEMO } from "./config";
 
 /** An error response from the API, with its machine-readable code ("cart_in_use", ...). */
 export class ApiError extends Error {
@@ -30,6 +30,15 @@ export const setAuthToken = (token: string | null) => {
 };
 
 async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
+  if (DEMO) {
+    const { demo } = await import("./demo");
+    const { DemoApiError } = await import("@smart-cart/demo");
+    try {
+      return (await demo().request(method, path, body, authToken)) as T;
+    } catch (e) {
+      throw e instanceof DemoApiError ? new ApiError(e.status, e.code) : e;
+    }
+  }
   let res: Response;
   try {
     res = await fetch(`${API_URL}${path}`, {

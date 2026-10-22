@@ -53,3 +53,11 @@ EXPO_PUBLIC_API_URL=http://localhost:4000 pnpm --filter @smart-cart/mobile smoke
   applied once by the server.
 - On every reconnect the app rejoins the cart room and the server sends a full snapshot.
 - Prices and totals on screen always come from the server; the app never sums money.
+
+## Web demo
+
+`pnpm build:web-demo` builds the app for the browser in demo mode (`EXPO_PUBLIC_DEMO=1`) into
+`dist-web/`. It needs no API: `@smart-cart/demo` answers the app's calls with the sample catalogue,
+carts and products are tapped instead of scanned, and payment is the test payment. The folder works
+from any path (GitHub Pages serves it at `/Smart-cart-/app/`). To try it locally:
+`npx serve dist-web` and open the address it prints, on a phone if both are on the same Wi-Fi.

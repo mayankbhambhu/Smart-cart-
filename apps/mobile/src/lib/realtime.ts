@@ -1,6 +1,7 @@
 import type { SmartCartEvent } from "@smart-cart/contracts";
 import { io, type Socket } from "socket.io-client";
-import { API_URL } from "./config";
+import { API_URL, DEMO } from "./config";
+import { demo } from "./demo";
 
 /**
  * Opens the Socket.IO connection for one cart session. On every (re)connect it joins the cart
@@ -13,6 +14,7 @@ export function connectCart(opts: {
   onEvent: (e: SmartCartEvent) => void;
   onLive: (live: boolean) => void;
 }): () => void {
+  if (DEMO) return demo().connect(opts.sessionId, opts.onEvent, opts.onLive);
   const socket: Socket = io(API_URL, { auth: { token: opts.token }, transports: ["websocket"] });
   socket.on("connect", () => {
     socket.emit("join", { room: "cart", sessionId: opts.sessionId }, (res: { ok: boolean }) => opts.onLive(res.ok));

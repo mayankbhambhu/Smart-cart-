@@ -9,7 +9,7 @@
     "typecheck": "tsc --noEmit",
     "lint": "tsc --noEmit",
     "test": "vitest run --passWithNoTests",
-    "build:demo": "node scripts/demo-catalog.mjs && NEXT_PUBLIC_DEMO=1 next build"
+    "build:demo": "NEXT_PUBLIC_DEMO=1 next build"
   },
   "dependencies": {
     "@smart-cart/contracts": "workspace:*",
@@ -17,7 +17,8 @@
     "next": "15.5.28",
     "react": "19.1.10",
     "react-dom": "19.1.10",
-    "socket.io-client": "^4.8.4"
+    "socket.io-client": "^4.8.4",
+    "@smart-cart/demo": "workspace:*"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.3.3",

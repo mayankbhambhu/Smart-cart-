@@ -1,8 +1,8 @@
 import type { ChatTurn, HelpRequest, HelpTopic, RouteListResponse, SearchResult } from "@smart-cart/contracts";
-import * as SecureStore from "expo-secure-store";
 import { create } from "zustand";
 import { api } from "./api";
 import { DEFAULT_STORE_ID } from "./config";
+import { storage } from "./storage";
 
 const BUDGET_KEY = "smartcart.budgetPaise";
 
@@ -59,15 +59,13 @@ export const useAssist = create<AssistState>((set, get) => ({
   },
 
   loadBudget: async () => {
-    const saved = await SecureStore.getItemAsync(BUDGET_KEY).catch(() => null);
+    const saved = await storage.get(BUDGET_KEY).catch(() => null);
     set({ budgetPaise: saved ? Number(saved) || null : null });
   },
 
   setBudget: async (paise) => {
     set({ budgetPaise: paise });
-    await (paise ? SecureStore.setItemAsync(BUDGET_KEY, String(paise)) : SecureStore.deleteItemAsync(BUDGET_KEY)).catch(
-      () => {},
-    );
+    await (paise ? storage.set(BUDGET_KEY, String(paise)) : storage.remove(BUDGET_KEY)).catch(() => {});
   },
 
   setListText: (listText) => set({ listText }),

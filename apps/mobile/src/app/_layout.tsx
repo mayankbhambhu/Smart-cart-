@@ -2,9 +2,10 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { useEffect, useState } from "react";
-import { ActivityIndicator, View } from "react-native";
+import { ActivityIndicator, Text, View } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { useAuth } from "../lib/auth-store";
+import { DEMO } from "../lib/config";
 import { colors } from "../lib/theme";
 
 export default function RootLayout() {
@@ -28,6 +29,13 @@ export default function RootLayout() {
     <SafeAreaProvider>
       <QueryClientProvider client={queryClient}>
         <StatusBar style="dark" />
+        {DEMO && (
+          <View style={{ backgroundColor: "#FEF3C7", paddingVertical: 6, paddingHorizontal: 12 }}>
+            <Text style={{ color: "#78350F", fontSize: 12, textAlign: "center" }}>
+              Demo: a simulated store in your browser. No real payments. Open the dashboard demo alongside to play staff.
+            </Text>
+          </View>
+        )}
         <Stack screenOptions={{ headerTintColor: colors.brand, contentStyle: { backgroundColor: colors.background } }}>
           <Stack.Protected guard={!signedIn}>
             <Stack.Screen name="sign-in" options={{ headerShown: false }} />

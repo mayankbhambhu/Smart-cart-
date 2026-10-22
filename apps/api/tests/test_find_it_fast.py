@@ -93,6 +93,11 @@ async def test_smart_list_becomes_a_walking_route(http: httpx.AsyncClient) -> No
     assert milk["line"] == "doodh" and "Milk" in milk["product"]["name"]
     assert milk["product"]["stock"] != "out"
 
+    # A size on the line picks that pack, even when a smaller one is cheaper per kg.
+    res = await http.post(f"{BASE}/lists/route", json={"lines": ["toor dal 1 kg", "toor dal"]})
+    picks = [item["product"]["name"] for stop in res.json()["stops"] for item in stop["items"]]
+    assert "Tata Sampann Toor Dal 1 kg" in picks and any(" 1 kg" not in name for name in picks)
+
 
 @integration
 async def test_missed_searches_show_up_in_insights(http: httpx.AsyncClient) -> None:
