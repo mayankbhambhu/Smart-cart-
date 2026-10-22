@@ -5,3 +5,8 @@
  */
 export const API_URL = process.env.EXPO_PUBLIC_API_URL ?? "http://localhost:4000";
 export const DEFAULT_STORE_ID = "S-01";
+/**
+ * Demo build (EXPO_PUBLIC_DEMO=1): no server. A simulated store in the app answers every call,
+ * so the app can be tried as a web page. Used for the GitHub Pages and preview builds only.
+ */
+export const DEMO = process.env.EXPO_PUBLIC_DEMO === "1";

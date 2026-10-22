@@ -1,0 +1,30 @@
+{
+  "name": "@smart-cart/demo",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "A simulated store for demo builds: the seed catalogue and the API's find-it-fast rules, in TypeScript.",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "catalog": "node scripts/catalog.mjs",
+    "build": "node scripts/catalog.mjs && tsc -p tsconfig.json",
+    "typecheck": "node scripts/catalog.mjs && tsc -p tsconfig.json --noEmit",
+    "lint": "tsc -p tsconfig.json --noEmit",
+    "test": "node scripts/catalog.mjs && vitest run"
+  },
+  "dependencies": {
+    "@smart-cart/contracts": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.5",
+    "typescript": "~5.9.3",
+    "vitest": "^4.0.0"
+  }
+}

@@ -2,12 +2,36 @@
  * Demo mode: an in-browser stand-in for the API, so the dashboard can be hosted as static files
  * (GitHub Pages) and clicked through without a server. It answers the same GET requests and emits
  * the same SmartCartEvents as the real API, from simulated shoppers, so the pages run unchanged.
+ *
+ * When the shopper app demo is open in the same browser, its cart, payment and help requests join
+ * the simulated ones over a BroadcastChannel, and staff answering a help request here updates the app.
  */
-import type { ExitCheckResponse, Receipt, SmartCartEvent } from "@smart-cart/contracts";
+import type {
+  AskResponse,
+  ExitCheckResponse,
+  HelpRequest,
+  HelpTopic,
+  Receipt,
+  SearchResult,
+  SmartCartEvent,
+  StoreInsights,
+} from "@smart-cart/contracts";
 import type { ActiveCart, InventoryItem, OrderRow, Totals } from "../api";
-import catalog from "./catalog.json";
+import {
+  catalog,
+  DEMO_APP_CARTS,
+  DEMO_CHANNEL,
+  exitCode,
+  gstIncluded,
+  retrieve,
+  routeList,
+  rulesAnswer,
+  search,
+  type BridgeMessage,
+  type DemoProduct,
+} from "@smart-cart/demo";
 
-type Product = (typeof catalog)[number];
+type Product = DemoProduct;
 type Session = {
   sessionId: string;
   cartCode: string;
@@ -15,16 +39,30 @@ type Session = {
   startedAt: string;
   status: "active" | "checking_out";
   lines: Map<string, number>;
+  lastAisle: string | null;
+  /** A shopper using the app demo in another tab, not one of the simulated ones. */
+  fromApp?: boolean;
 };
 
-type DemoOrder = OrderRow & { session: Session };
+type SearchLogRow = { query: string; source: string; resultCount: number; at: number };
+
+type DemoOrder = OrderRow & { session: Session; receipt?: Receipt };
 
 const STORE = "S-01";
 const SHOPPERS = [
   "Asha Patil", "Rohan Mehta", "Meera Iyer", "Kabir Shah", "Ananya Rao", "Vikram Nair",
   "Priya Desai", "Arjun Kulkarni", "Sneha Joshi", "Farhan Qureshi", "Divya Menon", "Rahul Gupta",
 ];
-const EXIT_ALPHABET = "23456789ABCDEFGHJKMNPQRSTUVWXYZ";
+/** Things shoppers look for that this store doesn't stock: what the Insights page should surface. */
+const MISSING = ["jeera", "rajma", "sabudana", "olive oil", "oats", "peanut butter", "green tea", "brown bread", "sabudana", "jeera", "jeera", "rajma"];
+const HELP_NOTES: [HelpTopic, string | null][] = [
+  ["find_item", "Where is jeera?"],
+  ["stock", "Amul butter 500 g shelf is empty"],
+  ["price", "Shelf price differs from the app"],
+  ["find_item", null],
+  ["other", "Need a bigger cart"],
+];
+const SHOPPER_VIEW_NAME = "You (shopper view)";
 const TICK_MS = 2500;
 const MAX_CARTS = 8;
 
@@ -32,19 +70,19 @@ const byId = new Map<string, Product>(catalog.map((p) => [p.productId, p]));
 const uuid = () => crypto.randomUUID();
 const pick = <T,>(xs: readonly T[]): T => xs[Math.floor(Math.random() * xs.length)]!;
 
-/** GST contained in an inclusive price, rounded half up (same rule as the API). */
-const gstIncluded = (total: number, rateBp: number) =>
-  rateBp === 0 ? 0 : Math.floor((total * rateBp * 2 + (10_000 + rateBp)) / (2 * (10_000 + rateBp)));
-
 class DemoStore {
   private onHand = new Map(catalog.map((p) => [p.productId, p.onHand]));
   private reserved = new Map(catalog.map((p) => [p.productId, 0]));
   private updatedAt = new Map(catalog.map((p) => [p.productId, new Date().toISOString()]));
   private sessions = new Map<string, Session>();
   private orders: DemoOrder[] = [];
+  private searchLog: SearchLogRow[] = [];
+  private help: HelpRequest[] = [];
   private listeners = new Set<(e: SmartCartEvent) => void>();
   private timer: ReturnType<typeof setInterval> | null = null;
   private pausedListeners = new Set<(paused: boolean) => void>();
+  private channel: BroadcastChannel | null = null;
+  private appHelp = new Set<string>();
   paused = false;
 
   constructor() {
@@ -61,6 +99,40 @@ class DemoStore {
       const s = this.pair(Date.now() - (3 + i * 6) * 60_000, false);
       if (!s) break;
       for (let n = 0; n < 2 + i; n++) this.add(s, false);
+    }
+    // A week of searches (some for things the store doesn't stock) and earlier help requests.
+    const words = ["milk", "atta", "haldi", "toor dal", "shampoo", "paneer", "biscuits", "rice", "chai", "ghee"];
+    for (let i = 0; i < 160; i++) {
+      const q = i % 5 === 0 ? MISSING[i % MISSING.length]! : words[i % words.length]!;
+      this.logSearch(q, i % 3 === 0 ? "list" : "search", this.find(q).length, Date.now() - (i * 61 + 7) * 60_000);
+    }
+    for (let i = 0; i < 9; i++) {
+      const [topic, note] = HELP_NOTES[i % HELP_NOTES.length]!;
+      const at = Date.now() - (300 + i * 380) * 60_000;
+      this.help.push({
+        id: uuid(),
+        storeId: STORE,
+        cartId: `C-${String((i % 20) + 1).padStart(4, "0")}`,
+        aisle: pick(["A1", "B1", "B2", "B3", "C2", "D1"]),
+        topic,
+        note,
+        status: "resolved",
+        shopperName: pick(SHOPPERS),
+        createdAt: new Date(at).toISOString(),
+        acknowledgedAt: new Date(at + (1 + (i % 4)) * 60_000).toISOString(),
+        resolvedAt: new Date(at + (4 + (i % 5)) * 60_000).toISOString(),
+      });
+    }
+    const waiting = [...this.sessions.values()][0];
+    if (waiting) this.callHelp(waiting, "find_item", "Where is jeera?", false, Date.now() - 2 * 60_000);
+
+    if (typeof BroadcastChannel !== "undefined") {
+      this.channel = new BroadcastChannel(DEMO_CHANNEL);
+      this.channel.onmessage = (m: MessageEvent<BridgeMessage>) => this.fromApp(m.data);
+      // Tells the app demo a dashboard is open, so staff here (not a simulated one) answer help.
+      const hello = (fresh: boolean) => this.channel?.postMessage({ kind: "hello", fresh } satisfies BridgeMessage);
+      hello(true);
+      setInterval(() => hello(false), 5_000);
     }
   }
 
@@ -98,6 +170,24 @@ class DemoStore {
         .map(({ session: _session, ...row }) => row);
       return { storeId: STORE, orders };
     }
+    if (url.pathname === `/v1/stores/${STORE}/products/search`) {
+      const q = url.searchParams.get("q") ?? "";
+      const results = this.find(q, url.searchParams.getAll("diet"));
+      this.logSearch(q, "search", results.length);
+      return { query: q, results: results.slice(0, 20) };
+    }
+    if (url.pathname === `/v1/stores/${STORE}/help/mine`) {
+      return { request: this.help.find((h) => h.shopperName === SHOPPER_VIEW_NAME) ?? null };
+    }
+    if (url.pathname === `/admin/v1/stores/${STORE}/help`) {
+      const openOnly = url.searchParams.get("openOnly") !== "false";
+      const dayAgo = Date.now() - 86_400_000;
+      const requests = this.help
+        .filter((h) => (openOnly ? h.status === "open" || h.status === "acknowledged" : Date.parse(h.createdAt) >= dayAgo))
+        .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+      return { storeId: STORE, requests };
+    }
+    if (url.pathname === `/admin/v1/stores/${STORE}/insights`) return this.insights(Number(url.searchParams.get("days") ?? 7));
     throw new Error(`GET ${path} is not available in demo mode`);
   }
 
@@ -111,6 +201,42 @@ class DemoStore {
       const result = order.exitUsedAt ? "already_used" : "ok";
       order.exitUsedAt ??= new Date().toISOString();
       return { result, order: this.receipt(order) } satisfies ExitCheckResponse;
+    }
+    if (path === `/v1/stores/${STORE}/lists/route`) {
+      const lines = (body as { lines: string[] }).lines;
+      return routeList((q) => {
+        const r = this.find(q);
+        this.logSearch(q, "list", r.length);
+        return r;
+      }, lines);
+    }
+    if (path === `/v1/stores/${STORE}/assistant`) {
+      const message = (body as { message: string }).message;
+      const products = retrieve((q) => this.find(q), message);
+      this.logSearch(message, "assistant", products.length);
+      return { reply: rulesAnswer(products), mode: "rules", products: products.slice(0, 5) } satisfies AskResponse;
+    }
+    if (path === `/v1/stores/${STORE}/help`) {
+      const existing = this.help.find(
+        (h) => h.shopperName === SHOPPER_VIEW_NAME && (h.status === "open" || h.status === "acknowledged"),
+      );
+      if (existing) return existing;
+      const { topic = "find_item", note = null } = body as { topic?: HelpTopic; note?: string | null };
+      return this.callHelp(null, topic, note, true);
+    }
+    const helpAction = new RegExp(`^(/admin)?/v1/stores/${STORE}/help/([^/]+)$`).exec(path);
+    if (helpAction) {
+      const h = this.help.find((x) => x.id === helpAction[2]);
+      if (!h) throw new Error("help_request_not_found");
+      const action = (body as { action: string }).action;
+      const now = new Date().toISOString();
+      if (action === "acknowledge") Object.assign(h, { status: "acknowledged", acknowledgedAt: now });
+      if (action === "resolve") Object.assign(h, { status: "resolved", resolvedAt: now, acknowledgedAt: h.acknowledgedAt ?? now });
+      if (action === "cancel") Object.assign(h, { status: "cancelled", resolvedAt: now });
+      const event: SmartCartEvent = { ...this.envelope(h.cartId, helpAction[1] ? "staff" : "phone"), type: "help.updated", data: { ...h } };
+      this.emit(event);
+      if (this.appHelp.has(h.id)) this.channel?.postMessage({ kind: "event", event } satisfies BridgeMessage);
+      return { ...h };
     }
     throw new Error(`POST ${path} is not available in demo mode`);
   }
@@ -151,7 +277,7 @@ class DemoStore {
 
   /** A shopper takes enough of the item closest to its threshold to trigger a low-stock alert. */
   triggerLowStock() {
-    const s = [...this.sessions.values()][0] ?? this.pair(Date.now(), true);
+    const s = [...this.sessions.values()].find((x) => !x.fromApp) ?? this.pair(Date.now(), true);
     if (!s) return;
     const headroom = (p: Product) => this.available(p.productId) - p.lowStockThreshold;
     const target = catalog.filter((p) => headroom(p) > 0).sort((a, b) => headroom(a) - headroom(b))[0];
@@ -164,7 +290,7 @@ class DemoStore {
   }
 
   private tick() {
-    const sessions = [...this.sessions.values()];
+    const sessions = [...this.sessions.values()].filter((s) => !s.fromApp);
     const r = Math.random();
     if (sessions.length === 0 || (sessions.length < MAX_CARTS && r < 0.2)) return this.addShopper();
     const paying = sessions.find((s) => s.status === "checking_out");
@@ -172,6 +298,11 @@ class DemoStore {
     const shopping = sessions.filter((s) => s.status === "active");
     if (shopping.length === 0) return this.addShopper();
     const s = pick(shopping);
+    if (r > 0.97 && !this.help.some((h) => h.shopperName === s.shopperName && h.status !== "resolved")) {
+      const [topic, note] = pick(HELP_NOTES);
+      return void this.callHelp(s, topic, note, true);
+    }
+    if (r > 0.9) return this.logSearch(pick(MISSING), "search", 0);
     const items = [...s.lines.values()].reduce((a, b) => a + b, 0);
     if (r < 0.3 && items >= 4) return this.checkout(s);
     if (r < 0.38 && s.lines.size > 0) return this.removeOne(s);
@@ -179,7 +310,7 @@ class DemoStore {
   }
 
   private pair(startedAt: number, emit: boolean): Session | null {
-    const used = new Set([...this.sessions.values()].map((s) => s.cartCode));
+    const used = new Set([...this.sessions.values()].map((s) => s.cartCode).concat(DEMO_APP_CARTS));
     const free = Array.from({ length: 20 }, (_, i) => `C-${String(i + 1).padStart(4, "0")}`).filter((c) => !used.has(c));
     const names = new Set([...this.sessions.values()].map((s) => s.shopperName));
     const shoppers = SHOPPERS.filter((n) => !names.has(n));
@@ -191,6 +322,7 @@ class DemoStore {
       startedAt: new Date(startedAt).toISOString(),
       status: "active",
       lines: new Map(),
+      lastAisle: null,
     };
     this.sessions.set(s.sessionId, s);
     if (emit)
@@ -208,6 +340,7 @@ class DemoStore {
     qty = Math.min(qty, this.available(p.productId));
     if (qty <= 0) return;
     s.lines.set(p.productId, (s.lines.get(p.productId) ?? 0) + qty);
+    s.lastAisle = p.aisle;
     const wasAvailable = this.available(p.productId);
     this.reserved.set(p.productId, this.reserved.get(p.productId)! + qty);
     this.touch(p.productId);
@@ -259,7 +392,7 @@ class DemoStore {
       totalPaise: totals.totalPaise,
       taxPaise: totals.taxPaise,
       itemCount: totals.itemCount,
-      exitCode: Array.from({ length: 6 }, () => pick([...EXIT_ALPHABET])).join(""),
+      exitCode: exitCode(),
       exitUsedAt: null,
       createdAt: new Date(at).toISOString(),
       session: s,
@@ -291,7 +424,72 @@ class DemoStore {
     return order;
   }
 
+  private find(q: string, diet: string[] = []): SearchResult[] {
+    return search(catalog, (id) => this.available(id), q, diet);
+  }
+
+  private logSearch(query: string, source: string, resultCount: number, at = Date.now()) {
+    if (query.trim()) this.searchLog.push({ query: query.trim().toLowerCase(), source, resultCount, at });
+  }
+
+  private callHelp(s: Session | null, topic: HelpTopic, note: string | null, emit: boolean, at = Date.now()): HelpRequest {
+    const h: HelpRequest = {
+      id: uuid(),
+      storeId: STORE,
+      cartId: s?.cartCode ?? null,
+      aisle: s ? s.lastAisle : null,
+      topic,
+      note,
+      status: "open",
+      shopperName: s?.shopperName ?? SHOPPER_VIEW_NAME,
+      createdAt: new Date(at).toISOString(),
+      acknowledgedAt: null,
+      resolvedAt: null,
+    };
+    this.help.push(h);
+    if (emit) this.emit({ ...this.envelope(h.cartId, "phone"), type: "help.requested", data: { ...h } });
+    return { ...h };
+  }
+
+  private insights(days: number): StoreInsights {
+    const since = Date.now() - days * 86_400_000;
+    const logs = this.searchLog.filter((l) => l.at >= since);
+    const missed = new Map<string, { count: number; lastAt: number }>();
+    for (const l of logs.filter((x) => x.resultCount === 0)) {
+      const m = missed.get(l.query) ?? { count: 0, lastAt: 0 };
+      missed.set(l.query, { count: m.count + 1, lastAt: Math.max(m.lastAt, l.at) });
+    }
+    const topMissed = [...missed]
+      .sort((a, b) => b[1].count - a[1].count || b[1].lastAt - a[1].lastAt)
+      .slice(0, 15)
+      .map(([query, m]) => ({ query, count: m.count, lastAt: new Date(m.lastAt).toISOString() }));
+    const help = this.help.filter((h) => Date.parse(h.createdAt) >= since);
+    const waits = help.filter((h) => h.acknowledgedAt).map((h) => (Date.parse(h.acknowledgedAt!) - Date.parse(h.createdAt)) / 60_000);
+    const count = (key: (h: HelpRequest) => string | null) => {
+      const out: Record<string, number> = {};
+      for (const h of help) {
+        const k = key(h);
+        if (k) out[k] = (out[k] ?? 0) + 1;
+      }
+      return Object.fromEntries(Object.entries(out).sort((a, b) => b[1] - a[1]));
+    };
+    return {
+      days,
+      searches: logs.length,
+      missedSearches: topMissed.reduce((n, m) => n + m.count, 0),
+      topMissed,
+      help: {
+        total: help.length,
+        open: help.filter((h) => h.status === "open" || h.status === "acknowledged").length,
+        avgMinutesToAcknowledge: waits.length ? Math.round((waits.reduce((a, b) => a + b, 0) / waits.length) * 10) / 10 : null,
+        byTopic: count((h) => h.topic),
+        byAisle: count((h) => h.aisle),
+      },
+    };
+  }
+
   private receipt(o: DemoOrder): Receipt {
+    if (o.receipt) return { ...o.receipt, exitUsedAt: o.exitUsedAt };
     const lines = [...o.session.lines].map(([productId, qty]) => this.line(byId.get(productId)!, qty));
     const byRate = new Map<number, { taxablePaise: number; taxPaise: number }>();
     for (const l of lines) {
@@ -315,6 +513,92 @@ class DemoStore {
       exitUsedAt: o.exitUsedAt,
       createdAt: o.createdAt,
     };
+  }
+
+  // ---- the shopper app demo, in another tab ---------------------------------------------------
+
+  private fromApp(msg: BridgeMessage) {
+    if (msg.kind === "sync") {
+      for (const app of msg.sessions) {
+        if (this.sessions.has(app.sessionId)) continue;
+        const s: Session = { ...app, lines: new Map(), lastAisle: null, fromApp: true };
+        for (const { productId, qty } of app.lines) {
+          s.lines.set(productId, qty);
+          this.reserved.set(productId, (this.reserved.get(productId) ?? 0) + qty);
+          s.lastAisle = byId.get(productId)?.aisle ?? s.lastAisle;
+        }
+        this.sessions.set(s.sessionId, s);
+      }
+      for (const h of msg.help) {
+        if (this.help.some((x) => x.id === h.id)) continue;
+        this.help.push({ ...h });
+        this.appHelp.add(h.id);
+      }
+      return; // arrives within the first request's simulated network delay, so pages load with it
+    }
+    if (msg.kind === "order") {
+      const { receipt, ...row } = msg.order;
+      const session = this.sessions.get(receipt.sessionId);
+      if (session && !this.orders.some((o) => o.orderId === row.orderId)) this.orders.push({ ...row, session, receipt });
+      return;
+    }
+    if (msg.kind !== "event") return;
+    const e = msg.event;
+    if (e.type === "cart.session_started") {
+      this.sessions.set(e.data.sessionId, {
+        sessionId: e.data.sessionId,
+        cartCode: e.data.cartCode,
+        shopperName: msg.shopperName ?? "App shopper",
+        startedAt: e.occurredAt,
+        status: "active",
+        lines: new Map(),
+        lastAisle: null,
+        fromApp: true,
+      });
+    } else if (e.type === "cart.item_added" || e.type === "cart.item_removed") {
+      const s = this.sessions.get(e.data.sessionId);
+      const productId = e.type === "cart.item_added" ? e.data.line.productId : e.data.productId;
+      const p = byId.get(productId);
+      if (!s || !p) return;
+      const qty = e.data.line?.qty ?? 0;
+      const wasAvailable = this.available(productId);
+      this.reserved.set(productId, this.reserved.get(productId)! + qty - (s.lines.get(productId) ?? 0));
+      if (qty > 0) s.lines.set(productId, qty);
+      else s.lines.delete(productId);
+      if (e.type === "cart.item_added") s.lastAisle = p.aisle;
+      this.touch(productId);
+      this.emit(e);
+      return this.stockChanged(p, s.cartCode, wasAvailable);
+    } else if (e.type === "cart.checked_out") {
+      const s = this.sessions.get(e.data.sessionId);
+      if (s) s.status = "checking_out";
+    } else if (e.type === "order.paid") {
+      const s = this.sessions.get(e.data.sessionId);
+      for (const [productId, qty] of s?.lines ?? []) {
+        this.onHand.set(productId, this.onHand.get(productId)! - qty);
+        this.reserved.set(productId, this.reserved.get(productId)! - qty);
+        this.touch(productId);
+        this.emit({
+          ...this.envelope(null, "system"),
+          type: "inventory.updated",
+          data: { productId, onHand: this.onHand.get(productId)!, reserved: this.reserved.get(productId)! },
+        });
+      }
+      s?.lines.clear();
+    } else if (e.type === "cart.session_ended") {
+      const s = this.sessions.get(e.data.sessionId);
+      for (const [productId, qty] of s?.lines ?? []) this.reserved.set(productId, this.reserved.get(productId)! - qty);
+      this.sessions.delete(e.data.sessionId);
+    } else if (e.type === "help.requested") {
+      if (this.help.some((h) => h.id === e.data.id)) return;
+      this.help.push({ ...e.data });
+      this.appHelp.add(e.data.id);
+    } else if (e.type === "help.updated") {
+      const h = this.help.find((x) => x.id === e.data.id);
+      if (!h) return;
+      Object.assign(h, e.data);
+    } else return; // inventory events: this tab keeps its own stock figures
+    this.emit(e);
   }
 
   private stockChanged(p: Product, cartCode: string, wasAvailable: number) {
@@ -390,7 +674,7 @@ class DemoStore {
     return { totalPaise, taxPaise, subtotalPaise: totalPaise - taxPaise, itemCount };
   }
 
-  private envelope(cartId: string | null, source: "phone" | "system") {
+  private envelope(cartId: string | null, source: "phone" | "system" | "staff") {
     return { eventId: uuid(), storeId: STORE, cartId, source, occurredAt: new Date().toISOString() };
   }
 

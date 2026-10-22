@@ -2,7 +2,10 @@ import type { CartLine, CartTotals } from "@smart-cart/contracts";
 import { router, Stack } from "expo-router";
 import { Alert, FlatList, Pressable, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { BudgetBar } from "../../components/BudgetBar";
 import { Button } from "../../components/Button";
+import { FindItFast } from "../../components/FindItFast";
+import { HelpBanner } from "../../components/HelpBanner";
 import { useCart } from "../../lib/cart-store";
 import { formatInr, formatRate } from "../../lib/money";
 import { colors } from "../../lib/theme";
@@ -65,6 +68,12 @@ export default function LiveCartScreen() {
         data={cart.lines}
         keyExtractor={(l) => l.productId}
         contentContainerStyle={cart.lines.length === 0 ? styles.emptyList : { paddingBottom: 16 }}
+        ListHeaderComponent={
+          <View style={styles.tools}>
+            <FindItFast />
+            <HelpBanner compact />
+          </View>
+        }
         ListEmptyComponent={
           <Text style={styles.centerText}>Your cart is empty.{"\n"}Scan each item as you put it in the cart.</Text>
         }
@@ -74,6 +83,7 @@ export default function LiveCartScreen() {
         )}
       />
       <View style={[styles.footer, { paddingBottom: 12 + insets.bottom }]}>
+        <BudgetBar totalPaise={cart.totals.totalPaise} />
         <Totals totals={cart.totals} />
         <Button title="Scan item" disabled={paying} onPress={() => router.push("/cart/scan")} />
         <Button
@@ -138,7 +148,8 @@ const styles = StyleSheet.create({
   screen: { flex: 1 },
   center: { flex: 1, alignItems: "center", justifyContent: "center", padding: 24 },
   centerText: { textAlign: "center", color: colors.muted, fontSize: 16 },
-  emptyList: { flexGrow: 1, justifyContent: "center", padding: 32 },
+  emptyList: { flexGrow: 1, justifyContent: "center", paddingBottom: 32 },
+  tools: { padding: 12, gap: 8 },
   separator: { height: 1, backgroundColor: colors.border },
   row: { flexDirection: "row", alignItems: "center", paddingHorizontal: 16, paddingVertical: 12, backgroundColor: colors.surface, gap: 12 },
   name: { fontSize: 16, fontWeight: "500", color: colors.text },

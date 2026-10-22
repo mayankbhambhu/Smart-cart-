@@ -15,6 +15,7 @@ apps/
   mobile/       React Native (Expo) app for Android and iPhone
 packages/
   contracts/    Shared event and API schemas (zod), exported as JSON Schema; the API is tested against them
+  demo/         In-browser stand-in for the API, used by the dashboard and app web demos
 infra/
   docker-compose.yml     Local Postgres, Redis, API and dashboard
   terraform/staging/     AWS ap-south-1 staging stack (not applied by CI)
@@ -30,7 +31,7 @@ pnpm install
 (cd apps/api && uv sync)
 docker compose -f infra/docker-compose.yml up -d postgres redis
 cp apps/api/.env.example apps/api/.env
-pnpm --filter @smart-cart/contracts build
+pnpm --filter "./packages/*" build
 pnpm db:migrate
 pnpm db:seed
 pnpm dev:api          # http://localhost:4000/readyz
@@ -41,13 +42,24 @@ Or run the whole stack in containers: `docker compose -f infra/docker-compose.ym
 
 Mobile: see [apps/mobile/README.md](apps/mobile/README.md).
 
-## Dashboard demo (GitHub Pages)
+## Web demos (GitHub Pages)
 
-`pnpm --filter @smart-cart/dashboard build:demo` builds the dashboard as static files in demo
-mode: the store's sample catalogue and simulated shoppers run in the browser, with no API. The
-`Dashboard demo on GitHub Pages` workflow publishes it on every push to main at
-https://mayankbhambhu.github.io/Smart-cart-/ once **Settings → Pages → Source** is set to
-**GitHub Actions**. The real dashboard still needs the API; the demo is for clicking through.
+Both demos run entirely in the browser on the sample catalogue, with no API, so they can be clicked
+through anywhere:
+
+- `pnpm --filter @smart-cart/dashboard build:demo` builds the staff dashboard with simulated
+  shoppers.
+- `pnpm --filter @smart-cart/mobile build:web-demo` builds the shopper app for the web
+  (`EXPO_PUBLIC_DEMO=1`): tap a cart and products instead of scanning, and pay with the test payment.
+
+Opened in the same browser, the two talk to each other: the shopper's cart, payment and help
+requests show up on the dashboard, and staff answering a help request update the phone. The
+dashboard's **Shopper app** page shows the app in a phone frame beside it.
+
+The `Demos on GitHub Pages` workflow publishes both on every push to main: the dashboard at
+https://mayankbhambhu.github.io/Smart-cart-/ and the app at
+https://mayankbhambhu.github.io/Smart-cart-/app/ (open that on a phone and add it to the home
+screen). Pages must be set to **Settings → Pages → Source: GitHub Actions**.
 
 ## Sign-in during development
 
@@ -86,11 +98,19 @@ order is marked paid only when Stripe's signed webhook says so. To try Stripe te
 your test keys in `apps/api/.env` and forward webhooks with the Stripe CLI:
 `stripe listen --forward-to localhost:4000/v1/payments/stripe/webhook`.
 
+## Ask SmartCart
+
+The in-app assistant looks the question up in the store's catalogue and stock first, then asks
+Claude to answer from only those facts: it must not invent a location, price or stock level, and it
+cannot buy, price or reserve anything. Set `ANTHROPIC_API_KEY` in `apps/api/.env` to turn Claude on;
+without it the same facts are turned into a plain answer by rules, which is also what the web demo
+uses.
+
 ## Tests
 
 ```sh
 pnpm typecheck
-pnpm test             # contracts, dashboard, mobile
+pnpm test             # contracts, demo, mobile
 pnpm test:api         # API (pytest); integration tests run when DATABASE_URL and REDIS_URL are set
 pnpm --filter @smart-cart/mobile export:check   # Android and iOS bundles
 ```
@@ -114,7 +134,9 @@ be checked before the pilot.
    Active carts page. The shopper app is React Native (Expo).
 3. **Pay and leave**: checkout, Stripe test-mode payment (or the built-in test payment), webhook,
    e-receipt with GST summary, one-time exit QR, and the dashboard's Orders page and exit check.
-4. Store view: live dashboard pages for carts and orders, low-stock alerts.
+4. **Find it fast**: product search with aisle, shelf, stock and unit price; a smart list that
+   becomes a walking route; Ask SmartCart; call for help with staff alerts; a budget tracker; and
+   store insights (missed searches, help by aisle). Plus the shopper app's web demo.
 5. Pilot hardening: reconnects, idempotency, rate limits, Sentry, a 20-shopper usability test.
 
 Deploying staging: [docs/deploy-staging.md](docs/deploy-staging.md).

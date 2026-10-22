@@ -74,6 +74,11 @@ export function StoreEventsProvider({ children }: { children: ReactNode }) {
             },
           );
           break;
+        case "help.requested":
+        case "help.updated":
+          void queryClient.invalidateQueries({ queryKey: ["help", STORE_ID] });
+          void queryClient.invalidateQueries({ queryKey: ["insights", STORE_ID] });
+          break;
         case "inventory.low_stock":
           setAlerts((a) => [
             {

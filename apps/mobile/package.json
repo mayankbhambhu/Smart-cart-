@@ -3,7 +3,9 @@
   "version": "0.1.0",
   "main": "expo-router/entry",
   "dependencies": {
+    "@expo/metro-runtime": "~58.0.15",
     "@smart-cart/contracts": "workspace:*",
+    "@smart-cart/demo": "workspace:*",
     "@stripe/stripe-react-native": "0.81.0",
     "@tanstack/react-query": "^5.104.5",
     "expo": "~58.0.17",
@@ -16,11 +18,13 @@
     "expo-secure-store": "~58.0.2",
     "expo-status-bar": "~58.0.4",
     "react": "19.3.0",
+    "react-dom": "19.3.0",
     "react-native": "0.88.0",
     "react-native-qrcode-svg": "^6.3.27",
     "react-native-safe-area-context": "~5.10.1",
     "react-native-screens": "~4.30.0",
     "react-native-svg": "15.16.0",
+    "react-native-web": "~0.21.4",
     "socket.io-client": "^4.8.4",
     "zustand": "^5.0.16"
   },
@@ -41,7 +45,8 @@
     "lint": "tsc --noEmit",
     "test": "jest",
     "export:check": "expo export --platform android --platform ios --output-dir dist",
-    "smoke": "tsx scripts/smoke.ts"
+    "smoke": "tsx scripts/smoke.ts",
+    "build:web-demo": "node scripts/web-demo.mjs"
   },
   "private": true,
   "jest": {

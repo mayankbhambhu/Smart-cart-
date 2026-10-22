@@ -1,7 +1,8 @@
-name: Dashboard demo on GitHub Pages
+name: Demos on GitHub Pages
 
 # Publishes the dashboard in demo mode (sample data, simulated shoppers, no API) to
-# https://<owner>.github.io/<repo>/. Needs Settings → Pages → Source: "GitHub Actions".
+# https://<owner>.github.io/<repo>/, and the shopper app's web demo to .../<repo>/app/.
+# Needs Settings → Pages → Source: "GitHub Actions".
 
 on:
   push:
@@ -27,11 +28,13 @@ jobs:
         with:
           node-version: 22
           cache: pnpm
-      - run: pnpm install --frozen-lockfile --filter @smart-cart/dashboard...
-      - run: pnpm --filter @smart-cart/contracts build
+      - run: pnpm install --frozen-lockfile --filter @smart-cart/dashboard... --filter @smart-cart/mobile...
+      - run: pnpm --filter "./packages/*" build
       - run: pnpm --filter @smart-cart/dashboard build:demo
         env:
           NEXT_PUBLIC_BASE_PATH: /${{ github.event.repository.name }}
+      - run: pnpm --filter @smart-cart/mobile build:web-demo
+      - run: cp -r apps/mobile/dist-web apps/dashboard/out/app
       - uses: actions/upload-pages-artifact@v3
         with:
           path: apps/dashboard/out

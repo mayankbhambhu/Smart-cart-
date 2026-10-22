@@ -13,6 +13,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from redis.asyncio import Redis
 
+from .assist_service import AssistService
+from .assistant import Assistant
 from .auth import DevTokenVerifier, FirebaseTokenVerifier, TokenVerifier
 from .cart_service import CartService
 from .checkout_service import CheckoutService
@@ -21,7 +23,7 @@ from .db import make_engine, make_sessionmaker
 from .errors import ApiError
 from .payments import make_provider
 from .realtime import Realtime
-from .routes import admin, carts, catalog, health, orders
+from .routes import admin, assist, carts, catalog, health, orders
 
 log = logging.getLogger("smartcart")
 
@@ -42,6 +44,8 @@ def create_app(settings: Settings | None = None, *, run_sweeper: bool = True) ->
     realtime = Realtime(settings.cors_origin_list, settings.redis_url if settings.realtime_redis else None)
     cart_service = CartService(redis, realtime.publish)
     checkout = CheckoutService(cart_service, make_provider(settings), realtime.publish)
+    assist_service = AssistService(realtime.publish)
+    assistant = Assistant(assist_service, settings.anthropic_api_key)
     realtime.attach(verifier, maker, cart_service)
 
     @contextlib.asynccontextmanager
@@ -50,6 +54,8 @@ def create_app(settings: Settings | None = None, *, run_sweeper: bool = True) ->
             log.warning("AUTH_MODE=dev: bearer tokens are not verified")
         if settings.payment_provider == "fake":
             log.warning("PAYMENT_PROVIDER=fake: orders are paid without taking money")
+        if assistant.mode == "rules":
+            log.info("ANTHROPIC_API_KEY not set: Ask SmartCart answers by rules, without AI")
 
         async def sweep() -> None:
             # Abandon idle carts so their stock reservations are released. Safe on every instance.
@@ -79,6 +85,8 @@ def create_app(settings: Settings | None = None, *, run_sweeper: bool = True) ->
     api.state.carts = cart_service
     api.state.checkout = checkout
     api.state.realtime = realtime
+    api.state.assist = assist_service
+    api.state.assistant = assistant
     api.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origin_list,
@@ -95,7 +103,15 @@ def create_app(settings: Settings | None = None, *, run_sweeper: bool = True) ->
         return JSONResponse({"error": "invalid_request", "issues": err.errors()}, status_code=400)
 
     # Module boundaries follow docs/architecture.md: each module owns its tables.
-    for r in (health.router, catalog.router, carts.router, orders.router, admin.router):
+    for r in (
+        health.router,
+        catalog.router,
+        carts.router,
+        orders.router,
+        admin.router,
+        assist.router,
+        assist.admin_router,
+    ):
         api.include_router(r)
 
     return socketio.ASGIApp(realtime.sio, other_asgi_app=api)

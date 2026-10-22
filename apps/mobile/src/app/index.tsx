@@ -3,7 +3,10 @@ import { router } from "expo-router";
 import { useEffect } from "react";
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { Button } from "../components/Button";
+import { FindItFast } from "../components/FindItFast";
+import { HelpBanner } from "../components/HelpBanner";
 import { api } from "../lib/api";
+import { useAssist } from "../lib/assist-store";
 import { useAuth } from "../lib/auth-store";
 import { useCart } from "../lib/cart-store";
 import { formatInr } from "../lib/money";
@@ -28,6 +31,11 @@ export default function HomeScreen() {
       .getState()
       .resume()
       .catch(() => {});
+    void useAssist.getState().loadBudget();
+    useAssist
+      .getState()
+      .refreshHelp()
+      .catch(() => {});
   }, []);
 
   return (
@@ -37,7 +45,7 @@ export default function HomeScreen() {
       {cart ? (
         <Pressable accessibilityRole="button" onPress={() => router.push("/cart")} style={styles.resume}>
           <Text style={styles.resumeTitle}>Continue with cart {cart.cartCode}</Text>
-          <Text style={styles.muted}>{cart.totals.itemCount} items</Text>
+          <Text style={styles.muted}>{cart.totals.itemCount} {cart.totals.itemCount === 1 ? "item" : "items"}</Text>
         </Pressable>
       ) : (
         <>
@@ -66,6 +74,10 @@ export default function HomeScreen() {
         </>
       )}
 
+      <Text style={styles.section}>Find it fast</Text>
+      <FindItFast />
+      <HelpBanner />
+
       {receipts.data && receipts.data.length > 0 && (
         <>
           <Text style={styles.section}>Past receipts</Text>
@@ -80,7 +92,7 @@ export default function HomeScreen() {
                 <Text style={styles.storeName}>{formatInr(r.totals.totalPaise)}</Text>
                 <Text style={styles.muted}>
                   {new Date(r.createdAt).toLocaleDateString("en-IN", { day: "numeric", month: "short" })} ·{" "}
-                  {r.totals.itemCount} items
+                  {r.totals.itemCount} {r.totals.itemCount === 1 ? "item" : "items"}
                 </Text>
               </View>
               <Text style={styles.start}>Receipt ›</Text>

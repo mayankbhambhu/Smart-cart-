@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import { DemoBanner } from "@/components/DemoBanner";
+import { HelpAlerts } from "@/components/HelpAlerts";
 import { LiveStatus } from "@/components/LiveStatus";
 import { LowStockAlerts } from "@/components/LowStockAlerts";
 import { Nav } from "@/components/Nav";
@@ -10,7 +11,7 @@ import { Providers } from "./providers";
 
 export const metadata: Metadata = {
   title: "Smart Cart · Store dashboard",
-  description: "Live inventory, active carts and orders for the Smart Cart pilot store.",
+  description: "Live inventory, carts, orders, floor help and shopper insights for the Smart Cart pilot store.",
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {
@@ -30,6 +31,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
             </div>
           </header>
           <main className="mx-auto max-w-6xl px-4 py-6">
+            <HelpAlerts />
             <LowStockAlerts />
             {children}
           </main>

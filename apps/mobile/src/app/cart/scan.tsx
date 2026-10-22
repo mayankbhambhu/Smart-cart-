@@ -1,3 +1,4 @@
+import { demoShelf } from "@smart-cart/demo";
 import * as Crypto from "expo-crypto";
 import { useRef, useState } from "react";
 import { Modal, Pressable, StyleSheet, Text, View } from "react-native";
@@ -42,6 +43,8 @@ export default function ScanItemScreen() {
         onCode={onCode}
         manualLabel="Barcode won't scan? Type the number under it."
         manualPlaceholder="2000000000015"
+        demoTitle="Demo shelf"
+        demoPicks={demoShelf.map((p) => ({ code: p.barcode, label: p.name, sub: `${formatInr(p.pricePaise)} · Aisle ${p.aisle}` }))}
       />
       <View style={styles.footer}>
         <Text style={styles.hint}>{message ?? "Point the camera at the barcode on the pack."}</Text>

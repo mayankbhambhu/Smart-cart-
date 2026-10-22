@@ -5,7 +5,7 @@ import type { NextConfig } from "next";
 const demo = process.env.NEXT_PUBLIC_DEMO === "1";
 
 const config: NextConfig = {
-  transpilePackages: ["@smart-cart/contracts"],
+  transpilePackages: ["@smart-cart/contracts", "@smart-cart/demo"],
   ...(demo
     ? { output: "export", basePath: process.env.NEXT_PUBLIC_BASE_PATH || undefined, trailingSlash: true }
     : { output: "standalone" }),

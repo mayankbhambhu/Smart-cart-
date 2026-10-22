@@ -21,11 +21,17 @@
       "package": "in.smartcart.app"
     },
     "web": {
-      "favicon": "./assets/favicon.png"
+      "favicon": "./assets/favicon.png",
+      "output": "single"
     },
     "scheme": "smartcart",
     "plugins": [
-      "expo-router",
+      [
+        "expo-router",
+        {
+          "asyncRoutes": false
+        }
+      ],
       "expo-secure-store",
       [
         "expo-camera",

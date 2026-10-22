@@ -19,7 +19,7 @@ from sqlalchemy import (
     Text,
     text,
 )
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
@@ -79,6 +79,13 @@ class OrderStatus(enum.StrEnum):
     refunded = "refunded"
 
 
+class HelpStatus(enum.StrEnum):
+    open = "open"
+    acknowledged = "acknowledged"
+    resolved = "resolved"
+    cancelled = "cancelled"
+
+
 class PaymentStatus(enum.StrEnum):
     created = "created"
     succeeded = "succeeded"
@@ -133,6 +140,8 @@ class Product(Base):
     gst_rate_bp: Mapped[int] = mapped_column(Integer)
     # Net pack weight in grams; used by the V3 weight-to-scan check.
     weight_g: Mapped[int | None] = mapped_column(Integer)
+    # Diet labels shoppers can filter by: veg, jain, no_added_sugar. Only what the pack label states.
+    diet_tags: Mapped[list[str]] = mapped_column(ARRAY(Text), server_default="{}", default=list)
 
     barcodes: Mapped[list["Barcode"]] = relationship(back_populates="product")
 
@@ -323,3 +332,45 @@ class Payment(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=False), server_default=text("CURRENT_TIMESTAMP")
     )
+
+
+class SearchLog(Base):
+    """What shoppers looked for, so the operations lead can see what the store failed to answer (US-10)."""
+
+    __tablename__ = "search_logs"
+    __table_args__ = (Index("search_logs_store_at_idx", "store_id", "at"),)
+    id: Mapped[str] = mapped_column(primary_key=True, default=new_id)
+    store_id: Mapped[str] = mapped_column(ForeignKey("stores.id", onupdate="CASCADE", ondelete="RESTRICT"))
+    query: Mapped[str]
+    source: Mapped[str]  # search | list | assistant
+    result_count: Mapped[int] = mapped_column(Integer)
+    at: Mapped[datetime] = mapped_column(DateTime(timezone=False), server_default=text("CURRENT_TIMESTAMP"))
+
+
+class HelpRequest(Base):
+    """A shopper asking for floor staff from the app (US-07), shown on staff screens (US-09)."""
+
+    __tablename__ = "help_requests"
+    __table_args__ = (Index("help_requests_store_status_idx", "store_id", "status"),)
+    id: Mapped[str] = mapped_column(primary_key=True, default=new_id)
+    store_id: Mapped[str] = mapped_column(ForeignKey("stores.id", onupdate="CASCADE", ondelete="RESTRICT"))
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", onupdate="CASCADE", ondelete="RESTRICT"))
+    cart_id: Mapped[str | None] = mapped_column(
+        ForeignKey("carts.id", onupdate="CASCADE", ondelete="SET NULL")
+    )
+    aisle: Mapped[str | None]
+    topic: Mapped[str]  # find_item | price | stock | other
+    note: Mapped[str | None]
+    status: Mapped[HelpStatus] = mapped_column(
+        pg_enum(HelpStatus, "HelpStatus"), server_default="open", default=HelpStatus.open
+    )
+    handled_by: Mapped[str | None] = mapped_column(
+        ForeignKey("users.id", onupdate="CASCADE", ondelete="SET NULL")
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=False), server_default=text("CURRENT_TIMESTAMP")
+    )
+    acknowledged_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=False))
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=False))
+
+    user: Mapped[User] = relationship(foreign_keys=[user_id])

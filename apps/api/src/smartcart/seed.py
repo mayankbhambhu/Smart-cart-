@@ -62,6 +62,7 @@ async def seed(db: AsyncSession) -> int:
             "hsn_code": r["hsn_code"],
             "gst_rate_bp": int(r["gst_rate_bp"]),
             "weight_g": int(r["weight_g"]) if r["weight_g"] else None,
+            "diet_tags": [t for t in r.get("diet", "").split(";") if t],
         }
         barcode = await db.get(Barcode, code)
         if barcode:

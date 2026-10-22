@@ -57,6 +57,18 @@ async function main() {
     await waitFor(() => events.some((e) => e.type === "cart.item_removed"), "item_removed pushed");
     console.log("removed one, pushed live");
 
+    // Milestone 4: find it fast, using the same client the screens use.
+    const haldi = await api.search("S-01", "haldi");
+    assert.ok(haldi.length > 0 && haldi.every((r) => r.aisle && r.name.includes("Turmeric")));
+    const route = await api.routeList("S-01", ["shampoo", "doodh", "atta"]);
+    assert.deepEqual(route.stops.map((s) => s.aisle), ["A1", "B1", "D1"]);
+    const answer = await api.ask("S-01", "Where is the paneer?", []);
+    assert.ok(answer.products.some((p) => p.name.includes("Paneer")));
+    const help = await api.requestHelp("S-01", "find_item", "smoke test");
+    await waitFor(() => events.some((e) => e.type === "help.requested"), "help.requested pushed");
+    assert.equal((await api.cancelHelp("S-01", help.id)).status, "cancelled");
+    console.log(`searched, routed a list, asked (${answer.mode}), called and cancelled help from aisle ${help.aisle}`);
+
     const { order, payment } = await api.checkout(sessionId);
     assert.equal(order.status, "pending_payment");
     await waitFor(() => events.some((e) => e.type === "cart.checked_out"), "checked_out pushed");

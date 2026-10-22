@@ -78,3 +78,31 @@ test("checkout freezes the cart and payment ends it with the order id", () => {
   } as SmartCartEvent);
   expect(other.kind).toBe("ignore");
 });
+
+describe("floor help events", () => {
+  it("passes help updates through to the help banner", () => {
+    const request = {
+      id: "h1",
+      storeId: "S-01",
+      cartId: "C-0001",
+      aisle: "B1",
+      topic: "find_item" as const,
+      note: null,
+      status: "acknowledged" as const,
+      shopperName: "Priya",
+      createdAt: "2026-10-22T10:00:00Z",
+      acknowledgedAt: "2026-10-22T10:01:00Z",
+      resolvedAt: null,
+    };
+    const outcome = applyEvent(null, {
+      type: "help.updated",
+      eventId: "6f1c1d1e-0000-4000-8000-000000000001",
+      storeId: "S-01",
+      cartId: "C-0001",
+      source: "staff",
+      occurredAt: "2026-10-22T10:01:00Z",
+      data: request,
+    });
+    expect(outcome).toEqual({ kind: "help", request });
+  });
+});

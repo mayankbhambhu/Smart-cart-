@@ -1,3 +1,4 @@
+import { DEMO_APP_CARTS } from "@smart-cart/demo";
 import { router, useLocalSearchParams } from "expo-router";
 import { useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
@@ -50,6 +51,8 @@ export default function PairScreen() {
         onCode={onCode}
         manualLabel="No camera? Type the cart number printed on the handle."
         manualPlaceholder="C-0001"
+        demoTitle="Carts by the entrance"
+        demoPicks={DEMO_APP_CARTS.map((c) => ({ code: c, label: `Cart ${c}`, sub: "QR on the handle" }))}
       />
       <View style={styles.footer}>
         <Text style={styles.hint}>{busy ? "Pairing…" : "Point the camera at the QR code on the cart handle."}</Text>

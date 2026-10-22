@@ -33,7 +33,7 @@ export function ReceiptLines({ lines, totals, gstSummary }: { lines: CartLine[];
         <Text style={styles.muted}>{formatInr(totals.taxPaise)}</Text>
       </View>
       <View style={styles.row}>
-        <Text style={styles.total}>Total · {totals.itemCount} items</Text>
+        <Text style={styles.total}>Total · {totals.itemCount} {totals.itemCount === 1 ? "item" : "items"}</Text>
         <Text style={styles.total}>{formatInr(totals.totalPaise)}</Text>
       </View>
     </View>

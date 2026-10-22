@@ -60,7 +60,7 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
         working-directory: .
-      - run: pnpm --filter @smart-cart/contracts build
+      - run: pnpm --filter "./packages/*" build
         working-directory: .
       - name: Mobile app smoke test against the API
         run: |
@@ -83,7 +83,7 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm --filter @smart-cart/contracts build
+      - run: pnpm --filter "./packages/*" build
       - name: Contract JSON Schemas are up to date
         run: git diff --exit-code packages/contracts/schema
       - run: pnpm typecheck
@@ -105,11 +105,13 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm --filter @smart-cart/contracts build
+      - run: pnpm --filter "./packages/*" build
       - run: pnpm --filter @smart-cart/mobile typecheck
       - run: pnpm --filter @smart-cart/mobile test
       - name: Bundle for Android and iOS
         run: pnpm --filter @smart-cart/mobile export:check
+      - name: Build the web demo
+        run: pnpm --filter @smart-cart/mobile build:web-demo
 
   terraform:
     name: Terraform (validate only, never applies)
