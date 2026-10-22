@@ -8,7 +8,8 @@
     "start": "next start --port 3000",
     "typecheck": "tsc --noEmit",
     "lint": "tsc --noEmit",
-    "test": "vitest run --passWithNoTests"
+    "test": "vitest run --passWithNoTests",
+    "build:demo": "node scripts/demo-catalog.mjs && NEXT_PUBLIC_DEMO=1 next build"
   },
   "dependencies": {
     "@smart-cart/contracts": "workspace:*",

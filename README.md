@@ -41,6 +41,14 @@ Or run the whole stack in containers: `docker compose -f infra/docker-compose.ym
 
 Mobile: see [apps/mobile/README.md](apps/mobile/README.md).
 
+## Dashboard demo (GitHub Pages)
+
+`pnpm --filter @smart-cart/dashboard build:demo` builds the dashboard as static files in demo
+mode: the store's sample catalogue and simulated shoppers run in the browser, with no API. The
+`Dashboard demo on GitHub Pages` workflow publishes it on every push to main at
+https://mayankbhambhu.github.io/Smart-cart-/ once **Settings → Pages → Source** is set to
+**GitHub Actions**. The real dashboard still needs the API; the demo is for clicking through.
+
 ## Sign-in during development
 
 Until the Firebase project exists, run the API with `AUTH_MODE=dev` (the default outside
