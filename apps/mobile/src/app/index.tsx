@@ -6,6 +6,7 @@ import { Button } from "../components/Button";
 import { api } from "../lib/api";
 import { useAuth } from "../lib/auth-store";
 import { useCart } from "../lib/cart-store";
+import { formatInr } from "../lib/money";
 import { colors } from "../lib/theme";
 
 export default function HomeScreen() {
@@ -13,6 +14,13 @@ export default function HomeScreen() {
   const signOut = useAuth((s) => s.signOut);
   const cart = useCart((s) => s.cart);
   const stores = useQuery({ queryKey: ["stores"], queryFn: api.stores });
+  const receipts = useQuery({ queryKey: ["my-orders"], queryFn: api.myOrders });
+
+  const paidOrderId = useCart((s) => s.paidOrderId);
+  useEffect(() => {
+    if (paidOrderId) void receipts.refetch();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [paidOrderId]);
 
   // If the app was closed mid-shop, pick the open cart back up.
   useEffect(() => {
@@ -58,6 +66,29 @@ export default function HomeScreen() {
         </>
       )}
 
+      {receipts.data && receipts.data.length > 0 && (
+        <>
+          <Text style={styles.section}>Past receipts</Text>
+          {receipts.data.slice(0, 5).map((r) => (
+            <Pressable
+              key={r.orderId}
+              accessibilityRole="button"
+              onPress={() => router.push({ pathname: "/receipt/[orderId]", params: { orderId: r.orderId } })}
+              style={({ pressed }) => [styles.card, styles.receipt, pressed && { opacity: 0.8 }]}
+            >
+              <View>
+                <Text style={styles.storeName}>{formatInr(r.totals.totalPaise)}</Text>
+                <Text style={styles.muted}>
+                  {new Date(r.createdAt).toLocaleDateString("en-IN", { day: "numeric", month: "short" })} ·{" "}
+                  {r.totals.itemCount} items
+                </Text>
+              </View>
+              <Text style={styles.start}>Receipt ›</Text>
+            </Pressable>
+          ))}
+        </>
+      )}
+
       <Pressable accessibilityRole="button" onPress={() => void signOut()} style={styles.signOut}>
         <Text style={styles.muted}>Sign out</Text>
       </Pressable>
@@ -72,6 +103,7 @@ const styles = StyleSheet.create({
   card: { backgroundColor: colors.surface, borderRadius: 14, padding: 16, borderWidth: 1, borderColor: colors.border },
   storeName: { fontSize: 17, fontWeight: "600", color: colors.text },
   start: { color: colors.brand, fontWeight: "600", marginTop: 8 },
+  receipt: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   resume: { backgroundColor: colors.brandSoft, borderRadius: 14, padding: 16 },
   resumeTitle: { fontSize: 17, fontWeight: "600", color: colors.brand },
   muted: { color: colors.muted },

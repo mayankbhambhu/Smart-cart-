@@ -3,8 +3,8 @@
  * (GitHub Pages) and clicked through without a server. It answers the same GET requests and emits
  * the same SmartCartEvents as the real API, from simulated shoppers, so the pages run unchanged.
  */
-import type { SmartCartEvent } from "@smart-cart/contracts";
-import type { ActiveCart, InventoryItem, Totals } from "../api";
+import type { ExitCheckResponse, Receipt, SmartCartEvent } from "@smart-cart/contracts";
+import type { ActiveCart, InventoryItem, OrderRow, Totals } from "../api";
 import catalog from "./catalog.json";
 
 type Product = (typeof catalog)[number];
@@ -13,14 +13,18 @@ type Session = {
   cartCode: string;
   shopperName: string;
   startedAt: string;
+  status: "active" | "checking_out";
   lines: Map<string, number>;
 };
+
+type DemoOrder = OrderRow & { session: Session };
 
 const STORE = "S-01";
 const SHOPPERS = [
   "Asha Patil", "Rohan Mehta", "Meera Iyer", "Kabir Shah", "Ananya Rao", "Vikram Nair",
   "Priya Desai", "Arjun Kulkarni", "Sneha Joshi", "Farhan Qureshi", "Divya Menon", "Rahul Gupta",
 ];
+const EXIT_ALPHABET = "23456789ABCDEFGHJKMNPQRSTUVWXYZ";
 const TICK_MS = 2500;
 const MAX_CARTS = 8;
 
@@ -37,12 +41,21 @@ class DemoStore {
   private reserved = new Map(catalog.map((p) => [p.productId, 0]));
   private updatedAt = new Map(catalog.map((p) => [p.productId, new Date().toISOString()]));
   private sessions = new Map<string, Session>();
+  private orders: DemoOrder[] = [];
   private listeners = new Set<(e: SmartCartEvent) => void>();
   private timer: ReturnType<typeof setInterval> | null = null;
   private pausedListeners = new Set<(paused: boolean) => void>();
   paused = false;
 
   constructor() {
+    // Earlier shoppers who already paid (most of them have left through the exit).
+    for (let i = 0; i < 5; i++) {
+      const s = this.pair(Date.now() - (60 - i * 9) * 60_000, false);
+      if (!s) break;
+      for (let n = 0; n < 3 + i; n++) this.add(s, false);
+      const order = this.pay(s, false, Date.now() - (45 - i * 9) * 60_000);
+      if (i < 4) order.exitUsedAt = new Date(Date.parse(order.createdAt) + 3 * 60_000).toISOString();
+    }
     // A few shoppers already mid-shop when the page opens.
     for (let i = 0; i < 4; i++) {
       const s = this.pair(Date.now() - (3 + i * 6) * 60_000, false);
@@ -73,13 +86,33 @@ class DemoStore {
           sessionId: s.sessionId,
           cartCode: s.cartCode,
           shopperName: s.shopperName,
-          status: "active",
+          status: s.status,
           startedAt: s.startedAt,
           totals: this.totals(s),
         }));
       return { storeId: STORE, sessions };
     }
+    if (url.pathname === `/admin/v1/stores/${STORE}/orders`) {
+      const orders = [...this.orders]
+        .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+        .map(({ session: _session, ...row }) => row);
+      return { storeId: STORE, orders };
+    }
     throw new Error(`GET ${path} is not available in demo mode`);
+  }
+
+  async post(path: string, body: unknown): Promise<unknown> {
+    await new Promise((r) => setTimeout(r, 150));
+    if (path === `/admin/v1/stores/${STORE}/exit-checks`) {
+      const raw = String((body as { code?: string }).code ?? "");
+      const code = (raw.includes("code=") ? raw.split("code=")[1]! : raw).trim().toUpperCase();
+      const order = this.orders.find((o) => o.exitCode === code);
+      if (!order) return { result: "not_found", order: null } satisfies ExitCheckResponse;
+      const result = order.exitUsedAt ? "already_used" : "ok";
+      order.exitUsedAt ??= new Date().toISOString();
+      return { result, order: this.receipt(order) } satisfies ExitCheckResponse;
+    }
+    throw new Error(`POST ${path} is not available in demo mode`);
   }
 
   // ---- live events ---------------------------------------------------------------------------
@@ -111,6 +144,11 @@ class DemoStore {
     if (s) this.add(s, true);
   }
 
+  /** The code of a paid order nobody has shown at the exit yet, so testers can try the door check. */
+  unusedExitCode(): string | null {
+    return this.orders.find((o) => !o.exitUsedAt)?.exitCode ?? null;
+  }
+
   /** A shopper takes enough of the item closest to its threshold to trigger a low-stock alert. */
   triggerLowStock() {
     const s = [...this.sessions.values()][0] ?? this.pair(Date.now(), true);
@@ -129,7 +167,11 @@ class DemoStore {
     const sessions = [...this.sessions.values()];
     const r = Math.random();
     if (sessions.length === 0 || (sessions.length < MAX_CARTS && r < 0.2)) return this.addShopper();
-    const s = pick(sessions);
+    const paying = sessions.find((s) => s.status === "checking_out");
+    if (paying && r < 0.6) return void this.pay(paying, true);
+    const shopping = sessions.filter((s) => s.status === "active");
+    if (shopping.length === 0) return this.addShopper();
+    const s = pick(shopping);
     const items = [...s.lines.values()].reduce((a, b) => a + b, 0);
     if (r < 0.3 && items >= 4) return this.checkout(s);
     if (r < 0.38 && s.lines.size > 0) return this.removeOne(s);
@@ -147,6 +189,7 @@ class DemoStore {
       cartCode: pick(free),
       shopperName: pick(shoppers),
       startedAt: new Date(startedAt).toISOString(),
+      status: "active",
       lines: new Map(),
     };
     this.sessions.set(s.sessionId, s);
@@ -194,24 +237,84 @@ class DemoStore {
     this.stockChanged(p, s.cartCode, wasAvailable);
   }
 
-  /** The shopper pays and leaves: reserved units become sold units. */
+  /** The shopper taps Checkout: the cart freezes while they pay. */
   private checkout(s: Session) {
+    s.status = "checking_out";
+    this.emit({
+      ...this.envelope(s.cartCode, "phone"),
+      type: "cart.checked_out",
+      data: { sessionId: s.sessionId, orderId: uuid(), totals: this.totals(s) },
+    });
+  }
+
+  /** Payment succeeds: reserved units become sold units, the cart is freed, an exit code issued. */
+  private pay(s: Session, emit: boolean, at = Date.now()): DemoOrder {
     this.sessions.delete(s.sessionId);
+    const totals = this.totals(s);
+    const order: DemoOrder = {
+      orderId: uuid(),
+      cartCode: s.cartCode,
+      shopperName: s.shopperName,
+      status: "paid",
+      totalPaise: totals.totalPaise,
+      taxPaise: totals.taxPaise,
+      itemCount: totals.itemCount,
+      exitCode: Array.from({ length: 6 }, () => pick([...EXIT_ALPHABET])).join(""),
+      exitUsedAt: null,
+      createdAt: new Date(at).toISOString(),
+      session: s,
+    };
+    this.orders.push(order);
     for (const [productId, qty] of s.lines) {
       this.onHand.set(productId, this.onHand.get(productId)! - qty);
       this.reserved.set(productId, this.reserved.get(productId)! - qty);
       this.touch(productId);
+      if (emit)
+        this.emit({
+          ...this.envelope(null, "system"),
+          type: "inventory.updated",
+          data: { productId, onHand: this.onHand.get(productId)!, reserved: this.reserved.get(productId)! },
+        });
+    }
+    if (emit) {
       this.emit({
-        ...this.envelope(null, "system"),
-        type: "inventory.updated",
-        data: { productId, onHand: this.onHand.get(productId)!, reserved: this.reserved.get(productId)! },
+        ...this.envelope(s.cartCode, "system"),
+        type: "order.paid",
+        data: { orderId: order.orderId, sessionId: s.sessionId, totalPaise: order.totalPaise },
+      });
+      this.emit({
+        ...this.envelope(s.cartCode, "system"),
+        type: "cart.session_ended",
+        data: { sessionId: s.sessionId, reason: "paid" },
       });
     }
-    this.emit({
-      ...this.envelope(s.cartCode, "system"),
-      type: "cart.session_ended",
-      data: { sessionId: s.sessionId, reason: "paid" },
-    });
+    return order;
+  }
+
+  private receipt(o: DemoOrder): Receipt {
+    const lines = [...o.session.lines].map(([productId, qty]) => this.line(byId.get(productId)!, qty));
+    const byRate = new Map<number, { taxablePaise: number; taxPaise: number }>();
+    for (const l of lines) {
+      const row = byRate.get(l.gstRateBp) ?? { taxablePaise: 0, taxPaise: 0 };
+      row.taxablePaise += l.lineTotalPaise - l.lineTaxPaise;
+      row.taxPaise += l.lineTaxPaise;
+      byRate.set(l.gstRateBp, row);
+    }
+    return {
+      orderId: o.orderId,
+      sessionId: o.session.sessionId,
+      storeId: STORE,
+      storeName: "DMart Pilot Store (demo)",
+      cartCode: o.cartCode,
+      status: o.status,
+      lines,
+      totals: { totalPaise: o.totalPaise, taxPaise: o.taxPaise, subtotalPaise: o.totalPaise - o.taxPaise, itemCount: o.itemCount },
+      gstSummary: [...byRate].map(([gstRateBp, r]) => ({ gstRateBp, ...r })),
+      exitCode: o.exitCode,
+      exitQr: `smartcart://exit?order=${o.orderId}&code=${o.exitCode}`,
+      exitUsedAt: o.exitUsedAt,
+      createdAt: o.createdAt,
+    };
   }
 
   private stockChanged(p: Product, cartCode: string, wasAvailable: number) {

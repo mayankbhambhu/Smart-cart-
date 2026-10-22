@@ -99,3 +99,52 @@ def cart_room(session_id: str) -> str:
 
 def store_room(store_id: str) -> str:
     return f"store:{store_id}"
+
+
+# --- orders and payments (packages/contracts/src/order.ts) ---
+
+OrderStatusName = Literal["pending_payment", "paid", "cancelled", "refunded"]
+ProviderName = Literal["fake", "stripe"]
+
+
+class GstSummaryRow(Wire):
+    gst_rate_bp: int
+    taxable_paise: int
+    tax_paise: int
+
+
+class Receipt(Wire):
+    order_id: str
+    session_id: str
+    store_id: str
+    store_name: str
+    cart_code: str
+    status: OrderStatusName
+    lines: list[CartLine]
+    totals: CartTotals
+    gst_summary: list[GstSummaryRow]
+    exit_code: str | None
+    exit_qr: str | None
+    exit_used_at: str | None
+    created_at: str
+
+
+class PaymentIntentOut(Wire):
+    provider: ProviderName
+    payment_id: str
+    client_secret: str | None
+    publishable_key: str | None
+
+
+class CheckoutResponse(Wire):
+    order: Receipt
+    payment: PaymentIntentOut
+
+
+class ExitCheckRequest(Wire):
+    code: str = Field(min_length=4, max_length=200)
+
+
+class ExitCheckResponse(Wire):
+    result: Literal["ok", "already_used", "not_paid", "not_found"]
+    order: Receipt | None

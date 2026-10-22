@@ -132,6 +132,9 @@ class CartService:
             updated_at=utcnow().isoformat() + "Z",
         )
 
+    async def lines(self, db: AsyncSession, session: CartSession) -> list[CartLine]:
+        return await self._lines(db, session.cart.store_id, await self._quantities(db, session))
+
     async def add_item(
         self,
         db: AsyncSession,

@@ -36,7 +36,7 @@ resource "aws_iam_role_policy_attachment" "execution" {
 data "aws_iam_policy_document" "read_secrets" {
   statement {
     actions   = ["secretsmanager:GetSecretValue"]
-    resources = [aws_secretsmanager_secret.database_url.arn]
+    resources = [aws_secretsmanager_secret.database_url.arn, aws_secretsmanager_secret.stripe.arn]
   }
 }
 
@@ -78,8 +78,16 @@ resource "aws_ecs_task_definition" "api" {
       { name = "PORT", value = "4000" },
       { name = "REDIS_URL", value = "redis://${aws_elasticache_cluster.redis.cache_nodes[0].address}:6379" },
       { name = "CORS_ORIGINS", value = local.public_url },
+      { name = "AUTH_MODE", value = "firebase" },
+      { name = "FIREBASE_PROJECT_ID", value = var.firebase_project_id },
+      { name = "PAYMENT_PROVIDER", value = "stripe" },
+      { name = "STRIPE_PUBLISHABLE_KEY", value = var.stripe_publishable_key },
     ]
-    secrets = [{ name = "DATABASE_URL", valueFrom = aws_secretsmanager_secret.database_url.arn }]
+    secrets = [
+      { name = "DATABASE_URL", valueFrom = aws_secretsmanager_secret.database_url.arn },
+      { name = "STRIPE_SECRET_KEY", valueFrom = "${aws_secretsmanager_secret.stripe.arn}:secret_key::" },
+      { name = "STRIPE_WEBHOOK_SECRET", valueFrom = "${aws_secretsmanager_secret.stripe.arn}:webhook_secret::" },
+    ]
     logConfiguration = {
       logDriver = "awslogs"
       options = {

@@ -54,3 +54,11 @@ resource "aws_secretsmanager_secret_version" "database_url" {
   secret_id     = aws_secretsmanager_secret.database_url.id
   secret_string = "postgresql://smartcart:${random_password.db.result}@${aws_db_instance.postgres.address}:5432/smartcart?schema=public"
 }
+
+# Stripe secret key and webhook signing secret, as JSON {"secret_key": "...", "webhook_secret": "..."}.
+# Terraform creates the empty secret; its value is set once with the AWS CLI (see
+# docs/deploy-staging.md) so it never appears in Terraform state, tfvars or the repo.
+resource "aws_secretsmanager_secret" "stripe" {
+  name                    = "${local.name}/stripe"
+  recovery_window_in_days = 0
+}

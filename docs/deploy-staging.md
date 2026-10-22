@@ -45,6 +45,18 @@ docker push <api-repo-url>:latest
 docker push <dashboard-repo-url>:latest
 ```
 
+Set the Stripe secrets once (test-mode keys for staging). Type them into your own terminal, never
+into chat, a file in the repo, or tfvars:
+
+```sh
+aws secretsmanager put-secret-value --region ap-south-1 --secret-id smart-cart-staging/stripe \
+  --secret-string '{"secret_key":"sk_test_...","webhook_secret":"whsec_..."}'
+```
+
+In the Stripe dashboard (test mode), add a webhook endpoint `<public_url>/v1/payments/stripe/webhook`
+for `payment_intent.succeeded` and `payment_intent.payment_failed`; its signing secret is the
+`webhook_secret` above.
+
 Then run migrations and the demo seed once (the exact command is the `migrate_command` output), and
 force new deployments:
 
@@ -59,5 +71,8 @@ Open the `public_url` output for the dashboard; `<public_url>/readyz` checks the
 
 - Domain and ACM certificate, HTTPS listener, redirect HTTP to HTTPS.
 - Admin routes behind staff sign-in (milestone 2).
+- Stripe live mode: live INR payments need a Stripe account registered in India (invite only at the
+  time of writing). If that is not available for the pilot, add the Razorpay adapter behind the
+  same `PaymentProvider` interface; test mode works either way.
 - RDS deletion protection, Multi-AZ, longer backups; a remote Terraform state bucket.
 - Separate pilot environment directory with larger sizes and 2 API tasks.

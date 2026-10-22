@@ -34,6 +34,7 @@ async function main() {
 
   const events: SmartCartEvent[] = [];
   let live = false;
+  let paidOrderId = "";
   const close = connectCart({ token, sessionId, onEvent: (e) => events.push(e), onLive: (l) => (live = l) });
   try {
     await waitFor(() => live && events.some((e) => e.type === "cart.snapshot"), "snapshot on join");
@@ -55,13 +56,31 @@ async function main() {
     assert.equal(removed.line?.qty, 1);
     await waitFor(() => events.some((e) => e.type === "cart.item_removed"), "item_removed pushed");
     console.log("removed one, pushed live");
+
+    const { order, payment } = await api.checkout(sessionId);
+    assert.equal(order.status, "pending_payment");
+    await waitFor(() => events.some((e) => e.type === "cart.checked_out"), "checked_out pushed");
+    await api.backToCart(order.orderId);
+    await api.addItem(sessionId, "2000000000015", 1, randomUUID());
+    const again = await api.checkout(sessionId);
+    assert.equal(again.order.orderId, order.orderId);
+    assert.equal(again.order.totals.itemCount, 2);
+    console.log(`checked out, went back to add one, checked out again: ${again.order.totals.totalPaise} paise`);
+
+    if (payment.provider !== "fake") throw new Error("the smoke test needs the API's fake payment provider");
+    const receipt = await api.payFake(order.orderId);
+    assert.equal(receipt.status, "paid");
+    assert.match(receipt.exitCode ?? "", /^[2-9A-Z]{6}$/);
+    await waitFor(() => events.some((e) => e.type === "order.paid"), "order.paid pushed");
+    paidOrderId = order.orderId;
+    console.log(`paid; exit code ${receipt.exitCode}`);
   } finally {
     close();
   }
 
-  await api.cancel(sessionId);
   assert.equal(await api.myCart(), null);
-  console.log("left the cart; smoke test passed");
+  assert.ok((await api.myOrders()).some((o) => o.orderId === paidOrderId), "receipt listed");
+  console.log("cart freed and receipt listed; smoke test passed");
 }
 
 main().catch((err) => {

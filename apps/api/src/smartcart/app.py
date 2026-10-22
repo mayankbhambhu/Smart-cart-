@@ -15,11 +15,13 @@ from redis.asyncio import Redis
 
 from .auth import DevTokenVerifier, FirebaseTokenVerifier, TokenVerifier
 from .cart_service import CartService
+from .checkout_service import CheckoutService
 from .config import Settings, get_settings
 from .db import make_engine, make_sessionmaker
 from .errors import ApiError
+from .payments import make_provider
 from .realtime import Realtime
-from .routes import admin, carts, catalog, health
+from .routes import admin, carts, catalog, health, orders
 
 log = logging.getLogger("smartcart")
 
@@ -39,18 +41,23 @@ def create_app(settings: Settings | None = None, *, run_sweeper: bool = True) ->
     verifier = make_verifier(settings)
     realtime = Realtime(settings.cors_origin_list, settings.redis_url if settings.realtime_redis else None)
     cart_service = CartService(redis, realtime.publish)
+    checkout = CheckoutService(cart_service, make_provider(settings), realtime.publish)
     realtime.attach(verifier, maker, cart_service)
 
     @contextlib.asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:
         if settings.auth_mode == "dev":
             log.warning("AUTH_MODE=dev: bearer tokens are not verified")
+        if settings.payment_provider == "fake":
+            log.warning("PAYMENT_PROVIDER=fake: orders are paid without taking money")
 
         async def sweep() -> None:
             # Abandon idle carts so their stock reservations are released. Safe on every instance.
             while True:
                 await asyncio.sleep(60)
                 try:
+                    # Carts left at the payment screen go back to shopping first, then idle carts close.
+                    await checkout.expire_stale(maker, settings.cart_idle_minutes)
                     n = await cart_service.sweep_idle(maker, settings.cart_idle_minutes)
                     if n:
                         log.info("abandoned %d idle cart sessions", n)
@@ -70,6 +77,7 @@ def create_app(settings: Settings | None = None, *, run_sweeper: bool = True) ->
     api.state.redis = redis
     api.state.verifier = verifier
     api.state.carts = cart_service
+    api.state.checkout = checkout
     api.state.realtime = realtime
     api.add_middleware(
         CORSMiddleware,
@@ -87,7 +95,7 @@ def create_app(settings: Settings | None = None, *, run_sweeper: bool = True) ->
         return JSONResponse({"error": "invalid_request", "issues": err.errors()}, status_code=400)
 
     # Module boundaries follow docs/architecture.md: each module owns its tables.
-    for r in (health.router, catalog.router, carts.router, admin.router):
+    for r in (health.router, catalog.router, carts.router, orders.router, admin.router):
         api.include_router(r)
 
     return socketio.ASGIApp(realtime.sio, other_asgi_app=api)

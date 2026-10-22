@@ -57,3 +57,24 @@ test("ignores events for another session and reports the session ending", () => 
   const ended = { ...envelope, type: "cart.session_ended", data: { sessionId: "s1", reason: "abandoned" } };
   expect(applyEvent(cart, ended as SmartCartEvent)).toEqual({ kind: "ended", reason: "abandoned" });
 });
+
+test("checkout freezes the cart and payment ends it with the order id", () => {
+  const out = applyEvent(cart, {
+    ...envelope,
+    type: "cart.checked_out",
+    data: { sessionId: "s1", orderId: "o1", totals: totals(100) },
+  } as SmartCartEvent);
+  expect(out.kind === "cart" && out.cart.status).toBe("checking_out");
+  const paid = applyEvent(cart, {
+    ...envelope,
+    type: "order.paid",
+    data: { orderId: "o1", sessionId: "s1", totalPaise: 100 },
+  } as SmartCartEvent);
+  expect(paid).toEqual({ kind: "paid", orderId: "o1" });
+  const other = applyEvent(cart, {
+    ...envelope,
+    type: "order.paid",
+    data: { orderId: "o2", sessionId: "s2", totalPaise: 100 },
+  } as SmartCartEvent);
+  expect(other.kind).toBe("ignore");
+});

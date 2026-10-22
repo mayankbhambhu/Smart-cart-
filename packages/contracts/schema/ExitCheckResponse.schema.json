@@ -1,0 +1,222 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "result": {
+      "type": "string",
+      "enum": [
+        "ok",
+        "already_used",
+        "not_paid",
+        "not_found"
+      ]
+    },
+    "order": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "orderId": {
+              "type": "string"
+            },
+            "sessionId": {
+              "type": "string"
+            },
+            "storeId": {
+              "type": "string",
+              "pattern": "^S-\\d{2,}$"
+            },
+            "storeName": {
+              "type": "string"
+            },
+            "cartCode": {
+              "type": "string",
+              "pattern": "^C-\\d{4,}$"
+            },
+            "status": {
+              "type": "string",
+              "enum": [
+                "pending_payment",
+                "paid",
+                "cancelled",
+                "refunded"
+              ]
+            },
+            "lines": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "productId": {
+                    "type": "string"
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "brand": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "imageUrl": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "qty": {
+                    "type": "integer",
+                    "exclusiveMinimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "unitPricePaise": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "gstRateBp": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 10000
+                  },
+                  "lineTotalPaise": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "lineTaxPaise": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  }
+                },
+                "required": [
+                  "productId",
+                  "name",
+                  "brand",
+                  "imageUrl",
+                  "qty",
+                  "unitPricePaise",
+                  "gstRateBp",
+                  "lineTotalPaise",
+                  "lineTaxPaise"
+                ]
+              }
+            },
+            "totals": {
+              "type": "object",
+              "properties": {
+                "totalPaise": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "taxPaise": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "subtotalPaise": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "itemCount": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                }
+              },
+              "required": [
+                "totalPaise",
+                "taxPaise",
+                "subtotalPaise",
+                "itemCount"
+              ]
+            },
+            "gstSummary": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "gstRateBp": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 10000
+                  },
+                  "taxablePaise": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "taxPaise": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  }
+                },
+                "required": [
+                  "gstRateBp",
+                  "taxablePaise",
+                  "taxPaise"
+                ]
+              }
+            },
+            "exitCode": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "exitQr": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "exitUsedAt": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date-time",
+                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "createdAt": {
+              "type": "string",
+              "format": "date-time",
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+            }
+          },
+          "required": [
+            "orderId",
+            "sessionId",
+            "storeId",
+            "storeName",
+            "cartCode",
+            "status",
+            "lines",
+            "totals",
+            "gstSummary",
+            "exitCode",
+            "exitQr",
+            "exitUsedAt",
+            "createdAt"
+          ]
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  },
+  "required": [
+    "result",
+    "order"
+  ]
+}
