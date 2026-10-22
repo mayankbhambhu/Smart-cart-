@@ -897,6 +897,11 @@
               "minimum": -9007199254740991,
               "maximum": 9007199254740991
             },
+            "available": {
+              "type": "integer",
+              "minimum": -9007199254740991,
+              "maximum": 9007199254740991
+            },
             "threshold": {
               "type": "integer",
               "minimum": -9007199254740991,
@@ -907,6 +912,7 @@
             "productId",
             "name",
             "onHand",
+            "available",
             "threshold"
           ]
         }

@@ -4,6 +4,7 @@ import { PrismaClient } from "@prisma/client";
 import { Redis } from "ioredis";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { buildApp } from "../src/app.js";
+import { DevTokenVerifier } from "../src/modules/auth/verifier.js";
 
 const enabled = Boolean(process.env.DATABASE_URL && process.env.REDIS_URL);
 
@@ -15,7 +16,7 @@ describe.skipIf(!enabled)("API against seeded database", () => {
   beforeAll(async () => {
     prisma = new PrismaClient();
     redis = new Redis(process.env.REDIS_URL!);
-    app = await buildApp({ prisma, redis, corsOrigins: [] });
+    app = await buildApp({ prisma, redis, verifier: new DevTokenVerifier(), corsOrigins: [] });
   });
 
   afterAll(async () => {
@@ -45,12 +46,24 @@ describe.skipIf(!enabled)("API against seeded database", () => {
     expect(res.statusCode).toBe(404);
   });
 
+  it("keeps store inventory for staff only", async () => {
+    const anon = await app.inject({ method: "GET", url: "/admin/v1/stores/S-01/inventory" });
+    expect(anon.statusCode).toBe(401);
+    const shopper = await app.inject({
+      method: "GET",
+      url: "/admin/v1/stores/S-01/inventory",
+      headers: { authorization: "Bearer dev:not-staff" },
+    });
+    expect(shopper.statusCode).toBe(403);
+  });
+
   it("lists store inventory and filters low stock", async () => {
-    const all = await app.inject({ method: "GET", url: "/admin/v1/stores/S-01/inventory" });
+    const headers = { authorization: "Bearer dev:staff-demo" };
+    const all = await app.inject({ method: "GET", url: "/admin/v1/stores/S-01/inventory", headers });
     expect(all.statusCode).toBe(200);
     expect(all.json().items.length).toBeGreaterThanOrEqual(150);
 
-    const low = await app.inject({ method: "GET", url: "/admin/v1/stores/S-01/inventory?lowStockOnly=false" });
+    const low = await app.inject({ method: "GET", url: "/admin/v1/stores/S-01/inventory?lowStockOnly=false", headers });
     expect(low.json().items.length).toBe(all.json().items.length);
   });
 });

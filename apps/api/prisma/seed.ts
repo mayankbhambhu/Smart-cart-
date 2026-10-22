@@ -69,6 +69,19 @@ async function main() {
       },
     });
   }
+  // Demo staff account. In AUTH_MODE=dev the dashboard signs in as "dev:staff-demo".
+  // With Firebase, add real staff by inserting a staff row for their user.
+  const staffUser = await prisma.user.upsert({
+    where: { firebaseUid: "staff-demo" },
+    update: {},
+    create: { firebaseUid: "staff-demo", name: "Demo Store Manager" },
+  });
+  await prisma.staff.upsert({
+    where: { userId_storeId: { userId: staffUser.id, storeId: STORE_ID } },
+    update: {},
+    create: { userId: staffUser.id, storeId: STORE_ID, role: "manager" },
+  });
+
   console.log(`Seeded store ${STORE_ID}, ${CART_COUNT} carts, ${rows.length} products.`);
 }
 
