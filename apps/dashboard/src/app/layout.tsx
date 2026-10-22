@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
+import { DemoBanner } from "@/components/DemoBanner";
 import { LiveStatus } from "@/components/LiveStatus";
 import { LowStockAlerts } from "@/components/LowStockAlerts";
 import { Nav } from "@/components/Nav";
@@ -17,6 +18,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
     <html lang="en-IN">
       <body>
         <Providers>
+          <DemoBanner />
           <header className="border-b border-slate-200 bg-white">
             <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-4 py-3">
               <div className="flex items-center gap-2">

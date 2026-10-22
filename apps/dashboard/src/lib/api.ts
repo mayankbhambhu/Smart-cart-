@@ -6,7 +6,17 @@ export const STORE_ID = process.env.NEXT_PUBLIC_STORE_ID ?? "S-01";
  */
 export const AUTH_TOKEN = process.env.NEXT_PUBLIC_DEV_AUTH_TOKEN ?? "dev:staff-demo";
 
+/**
+ * Demo mode (NEXT_PUBLIC_DEMO=1): no API at all. Data and live events come from simulated
+ * shoppers in the browser, so the dashboard can be hosted as static files on GitHub Pages.
+ */
+export const DEMO = process.env.NEXT_PUBLIC_DEMO === "1";
+
 export async function apiGet<T>(path: string): Promise<T> {
+  if (DEMO) {
+    const { demoStore } = await import("./demo/store");
+    return demoStore().get(path) as Promise<T>;
+  }
   const res = await fetch(`${API_URL}${path}`, {
     cache: "no-store",
     headers: { authorization: `Bearer ${AUTH_TOKEN}` },

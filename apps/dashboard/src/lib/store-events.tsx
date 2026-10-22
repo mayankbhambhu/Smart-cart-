@@ -4,7 +4,7 @@ import type { SmartCartEvent } from "@smart-cart/contracts";
 import { useQueryClient } from "@tanstack/react-query";
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import { io } from "socket.io-client";
-import { API_URL, AUTH_TOKEN, STORE_ID, type ActiveCart, type InventoryItem } from "./api";
+import { API_URL, AUTH_TOKEN, DEMO, STORE_ID, type ActiveCart, type InventoryItem } from "./api";
 
 export type Connection = "connecting" | "live" | "offline";
 export type LowStockAlert = { productId: string; name: string; available: number; onHand: number; at: string };
@@ -23,18 +23,7 @@ export function StoreEventsProvider({ children }: { children: ReactNode }) {
   const [alerts, setAlerts] = useState<LowStockAlert[]>([]);
 
   useEffect(() => {
-    const socket = io(API_URL, { auth: { token: AUTH_TOKEN }, transports: ["websocket", "polling"] });
-
-    socket.on("connect", async () => {
-      const res = await socket.emitWithAck("join", { room: "store", storeId: STORE_ID });
-      setConnection(res?.ok ? "live" : "offline");
-      // Anything missed while disconnected: reload from REST.
-      void queryClient.invalidateQueries();
-    });
-    socket.on("disconnect", () => setConnection("offline"));
-    socket.on("connect_error", () => setConnection("offline"));
-
-    socket.on("event", (event: SmartCartEvent) => {
+    const onEvent = (event: SmartCartEvent) => {
       switch (event.type) {
         case "cart.session_started":
         case "cart.session_ended":
@@ -82,8 +71,27 @@ export function StoreEventsProvider({ children }: { children: ReactNode }) {
           ]);
           break;
       }
-    });
+    };
 
+    if (DEMO) {
+      let unsubscribe = () => {};
+      void import("./demo/store").then(({ demoStore }) => {
+        unsubscribe = demoStore().subscribe(onEvent);
+        setConnection("live");
+      });
+      return () => unsubscribe();
+    }
+
+    const socket = io(API_URL, { auth: { token: AUTH_TOKEN }, transports: ["websocket", "polling"] });
+    socket.on("connect", async () => {
+      const res = await socket.emitWithAck("join", { room: "store", storeId: STORE_ID });
+      setConnection(res?.ok ? "live" : "offline");
+      // Anything missed while disconnected: reload from REST.
+      void queryClient.invalidateQueries();
+    });
+    socket.on("disconnect", () => setConnection("offline"));
+    socket.on("connect_error", () => setConnection("offline"));
+    socket.on("event", onEvent);
     return () => {
       socket.disconnect();
     };
