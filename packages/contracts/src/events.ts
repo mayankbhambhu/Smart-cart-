@@ -64,6 +64,8 @@ export const InventoryLowStockEvent = envelope(
     productId: z.string(),
     name: z.string(),
     onHand: z.number().int(),
+    /** onHand minus units sitting in open carts. */
+    available: z.number().int(),
     threshold: z.number().int(),
   }),
 );

@@ -16,8 +16,6 @@ export default function InventoryPage() {
       if (q) params.set("q", q);
       return apiGet<{ items: InventoryItem[] }>(`/admin/v1/stores/${STORE_ID}/inventory?${params}`);
     },
-    // Live updates arrive over the store WebSocket room in milestone 4; poll until then.
-    refetchInterval: 15_000,
   });
 
   const items = data?.items ?? [];

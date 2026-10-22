@@ -41,6 +41,26 @@ Or run the whole stack in containers: `docker compose -f infra/docker-compose.ym
 
 Mobile: see [apps/mobile/README.md](apps/mobile/README.md).
 
+## Sign-in during development
+
+Until the Firebase project exists, run the API with `AUTH_MODE=dev` (the default outside
+production). It then accepts bearer tokens of the form `dev:<uid>` or `dev:<uid>:<display name>`
+without checking them, and refuses to start that way when `NODE_ENV=production`. The seed creates a
+demo store manager, `dev:staff-demo`, which the dashboard uses. With `AUTH_MODE=firebase` and
+`FIREBASE_PROJECT_ID` set, the API verifies real Firebase ID tokens against Google's public keys.
+
+## Try the cart from a terminal
+
+```sh
+T="Authorization: Bearer dev:asha:Asha"
+curl -s -X POST localhost:4000/v1/carts/pair -H "$T" -H 'content-type: application/json' \
+  -d '{"cartCode":"C-0001","storeId":"S-01"}'            # returns the sessionId
+curl -s -X POST localhost:4000/v1/carts/<sessionId>/items -H "$T" -H 'content-type: application/json' \
+  -d "{\"barcode\":\"2000000000015\",\"qty\":2,\"requestId\":\"$(uuidgen)\"}"
+```
+
+Open http://localhost:3000/carts to watch the cart appear and its total update live.
+
 ## Tests
 
 ```sh
@@ -65,6 +85,7 @@ be checked before the pilot. Regenerate the file with `pnpm --filter @smart-cart
 1. **Skeleton** (this): monorepo, schema, seed, API health and catalogue lookup, inventory
    dashboard, Flutter shell, Terraform for staging, CI.
 2. Scan to cart: sign-in, pair by QR, camera scanning, live cart over WebSocket.
+   The API and dashboard side is done; the shopper app is moving from Flutter to React.
 3. Pay and leave: Stripe test-mode checkout, webhook, e-receipt and exit QR.
 4. Store view: live dashboard pages for carts and orders, low-stock alerts.
 5. Pilot hardening: reconnects, idempotency, rate limits, Sentry, a 20-shopper usability test.
