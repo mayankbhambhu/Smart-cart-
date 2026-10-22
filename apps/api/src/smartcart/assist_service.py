@@ -126,6 +126,8 @@ _STOCK_RANK = {"in_stock": 0, "low": 1, "unknown": 2, "out": 3}
 class HelpView:
     request: HelpRequest
     shopper_name: str | None
+    # The floor assistant who took it, so the shopper sees who is coming.
+    staff_name: str | None = None
 
     def wire(self) -> dict[str, Any]:
         r = self.request
@@ -138,6 +140,7 @@ class HelpView:
             "note": r.note,
             "status": r.status.value,
             "shopperName": self.shopper_name,
+            "staffName": self.staff_name,
             "createdAt": r.created_at.isoformat() + "Z",
             "acknowledgedAt": r.acknowledged_at.isoformat() + "Z" if r.acknowledged_at else None,
             "resolvedAt": r.resolved_at.isoformat() + "Z" if r.resolved_at else None,
@@ -315,7 +318,7 @@ class AssistService:
             raise ApiError(400, "invalid_action")
         await db.commit()
         name = await self._user_name(db, req.user_id)
-        view = HelpView(req, name)
+        view = HelpView(req, name, await self._user_name(db, req.handled_by) if req.handled_by else None)
         session = await self._open_session(db, store_id, req.user_id)
         await self._announce("help.updated", view, session, source="staff" if staff else "phone")
         return view
@@ -327,8 +330,11 @@ class AssistService:
         else:
             stmt = stmt.where(HelpRequest.created_at >= utcnow() - timedelta(days=1))
         rows = list(await db.scalars(stmt.order_by(HelpRequest.created_at.desc()).limit(100)))
-        names = {r.user_id: await self._user_name(db, r.user_id) for r in rows}
-        return [HelpView(r, names[r.user_id]).wire() for r in rows]
+        ids = {r.user_id for r in rows} | {r.handled_by for r in rows if r.handled_by}
+        names = {i: await self._user_name(db, i) for i in ids}
+        return [
+            HelpView(r, names[r.user_id], names[r.handled_by] if r.handled_by else None).wire() for r in rows
+        ]
 
     async def my_help(self, db: AsyncSession, store_id: str, user_id: str) -> dict[str, Any] | None:
         req = await db.scalar(
@@ -337,7 +343,11 @@ class AssistService:
             .order_by(HelpRequest.created_at.desc())
             .limit(1)
         )
-        return HelpView(req, None).wire() if req else None
+        if not req:
+            return None
+        return HelpView(
+            req, None, await self._user_name(db, req.handled_by) if req.handled_by else None
+        ).wire()
 
     # ---- Insights for the operations lead (US-10) -----------------------------------------------
 

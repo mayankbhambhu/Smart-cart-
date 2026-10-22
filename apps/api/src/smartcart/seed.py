@@ -101,18 +101,23 @@ async def seed(db: AsyncSession) -> int:
             )
         await db.flush()
 
-    # Demo staff account. In AUTH_MODE=dev the dashboard signs in as "dev:staff-demo".
-    # With Firebase, add real staff by inserting a staff row for their user.
-    staff_user = await db.scalar(select(User).where(User.firebase_uid == "staff-demo"))
-    if not staff_user:
-        staff_user = User(firebase_uid="staff-demo", name="Demo Store Manager")
-        db.add(staff_user)
-        await db.flush()
-    existing = await db.scalar(
-        select(Staff).where(Staff.user_id == staff_user.id, Staff.store_id == STORE_ID)
-    )
-    if not existing:
-        db.add(Staff(user_id=staff_user.id, store_id=STORE_ID, role=StaffRole.manager))
+    # Demo accounts for AUTH_MODE=dev: the dashboard signs in as "dev:staff-demo" (store manager) and
+    # "dev:admin-demo" is the SmartCart admin team, who approve staff accounts. Real store-team
+    # accounts are made only through a manager's request and the admin team's approval.
+    for uid, name, role, code in (
+        ("staff-demo", "Demo Store Manager", StaffRole.manager, "S01-0001"),
+        ("admin-demo", "SmartCart Admin (demo)", StaffRole.admin, "ADM-0001"),
+    ):
+        user = await db.scalar(select(User).where(User.firebase_uid == uid))
+        if not user:
+            user = User(firebase_uid=uid, name=name)
+            db.add(user)
+            await db.flush()
+        existing = await db.scalar(select(Staff).where(Staff.user_id == user.id, Staff.store_id == STORE_ID))
+        if not existing:
+            db.add(Staff(user_id=user.id, store_id=STORE_ID, role=role, staff_code=code, full_name=name))
+        elif not existing.staff_code:
+            existing.staff_code, existing.full_name = code, name
 
     await db.commit()
     return len(rows)

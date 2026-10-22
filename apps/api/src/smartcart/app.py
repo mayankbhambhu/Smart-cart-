@@ -15,7 +15,7 @@ from redis.asyncio import Redis
 
 from .assist_service import AssistService
 from .assistant import Assistant
-from .auth import DevTokenVerifier, FirebaseTokenVerifier, TokenVerifier
+from .auth import DevTokenVerifier, FirebaseTokenVerifier, SessionTokenVerifier, TokenVerifier
 from .cart_service import CartService
 from .checkout_service import CheckoutService
 from .config import Settings, get_settings
@@ -23,16 +23,22 @@ from .db import make_engine, make_sessionmaker
 from .errors import ApiError
 from .payments import make_provider
 from .realtime import Realtime
-from .routes import admin, assist, carts, catalog, health, orders
+from .routes import admin, assist, carts, catalog, health, orders, staff
+from .staff_service import StaffService
+from .store_ops import StoreOps
 
 log = logging.getLogger("smartcart")
 
 
 def make_verifier(settings: Settings) -> TokenVerifier:
+    """Store-team session tokens from the API itself, then Firebase (or dev tokens in development)."""
+    inner: TokenVerifier
     if settings.auth_mode == "firebase":
         assert settings.firebase_project_id
-        return FirebaseTokenVerifier(settings.firebase_project_id)
-    return DevTokenVerifier()
+        inner = FirebaseTokenVerifier(settings.firebase_project_id)
+    else:
+        inner = DevTokenVerifier()
+    return SessionTokenVerifier(settings.signing_secret, inner)
 
 
 def create_app(settings: Settings | None = None, *, run_sweeper: bool = True) -> Any:
@@ -46,6 +52,8 @@ def create_app(settings: Settings | None = None, *, run_sweeper: bool = True) ->
     checkout = CheckoutService(cart_service, make_provider(settings), realtime.publish)
     assist_service = AssistService(realtime.publish)
     assistant = Assistant(assist_service, settings.anthropic_api_key)
+    staff_service = StaffService(settings.signing_secret, settings.sms_provider)
+    ops = StoreOps(cart_service, realtime.publish)
     realtime.attach(verifier, maker, cart_service)
 
     @contextlib.asynccontextmanager
@@ -54,6 +62,8 @@ def create_app(settings: Settings | None = None, *, run_sweeper: bool = True) ->
             log.warning("AUTH_MODE=dev: bearer tokens are not verified")
         if settings.payment_provider == "fake":
             log.warning("PAYMENT_PROVIDER=fake: orders are paid without taking money")
+        if not settings.session_secret:
+            log.warning("SESSION_SECRET not set: store-team tokens use a fixed development secret")
         if assistant.mode == "rules":
             log.info("ANTHROPIC_API_KEY not set: Ask SmartCart answers by rules, without AI")
 
@@ -67,6 +77,9 @@ def create_app(settings: Settings | None = None, *, run_sweeper: bool = True) ->
                     n = await cart_service.sweep_idle(maker, settings.cart_idle_minutes)
                     if n:
                         log.info("abandoned %d idle cart sessions", n)
+                    n = await ops.expire_due(maker)
+                    if n:
+                        log.info("expired %d reservations", n)
                 except Exception:
                     log.exception("idle cart sweep failed")
 
@@ -87,6 +100,8 @@ def create_app(settings: Settings | None = None, *, run_sweeper: bool = True) ->
     api.state.realtime = realtime
     api.state.assist = assist_service
     api.state.assistant = assistant
+    api.state.staff = staff_service
+    api.state.ops = ops
     api.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origin_list,
@@ -111,6 +126,11 @@ def create_app(settings: Settings | None = None, *, run_sweeper: bool = True) ->
         admin.router,
         assist.router,
         assist.admin_router,
+        staff.auth_router,
+        staff.shopper_router,
+        staff.floor_router,
+        staff.manager_router,
+        staff.admin_team_router,
     ):
         api.include_router(r)
 

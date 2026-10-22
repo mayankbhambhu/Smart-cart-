@@ -11,8 +11,9 @@ from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from . import security
 from .errors import ApiError
-from .models import Staff, User, new_id
+from .models import Staff, StaffRole, StaffStatus, User, new_id
 
 FIREBASE_JWKS_URL = (
     "https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com"
@@ -83,6 +84,24 @@ class DevTokenVerifier:
         return Identity(uid=m.group(1), name=m.group(2))
 
 
+class SessionTokenVerifier:
+    """Accepts the API's own store-team session tokens, and hands every other token to `inner`
+    (Firebase, or dev tokens in development)."""
+
+    def __init__(self, secret: str, inner: TokenVerifier) -> None:
+        self.secret = secret
+        self.inner = inner
+
+    async def verify(self, token: str) -> Identity:
+        if not security.is_session_token(token):
+            return await self.inner.verify(token)
+        try:
+            claims = security.read_session(self.secret, token)
+        except jwt.PyJWTError as err:
+            raise AuthError("invalid session token") from err
+        return Identity(uid=claims.uid, name=claims.name)
+
+
 def bearer_token(header: str | None) -> str | None:
     m = re.match(r"^Bearer\s+(.+)$", header or "", re.IGNORECASE)
     return m.group(1).strip() if m else None
@@ -108,9 +127,24 @@ async def upsert_user(db: AsyncSession, identity: Identity) -> AuthUser:
     return AuthUser(id=row.id, firebase_uid=row.firebase_uid, name=row.name)
 
 
+FLOOR = (StaffRole.floor_staff, StaffRole.manager, StaffRole.admin)
+MANAGERS = (StaffRole.manager, StaffRole.admin)
+
+
+async def staff_record(db: AsyncSession, user_id: str, store_id: str | None = None) -> Staff | None:
+    """The caller's active store-team account: at this store, or an admin (SmartCart team) anywhere."""
+    rows = list(
+        await db.scalars(select(Staff).where(Staff.user_id == user_id, Staff.status == StaffStatus.active))
+    )
+    if store_id is None:
+        return next((r for r in rows if r.role == StaffRole.admin), rows[0] if rows else None)
+    return next((r for r in rows if r.store_id == store_id), None) or next(
+        (r for r in rows if r.role == StaffRole.admin), None
+    )
+
+
 async def is_staff(db: AsyncSession, user_id: str, store_id: str) -> bool:
-    found = await db.scalar(select(Staff.id).where(Staff.user_id == user_id, Staff.store_id == store_id))
-    return found is not None
+    return await staff_record(db, user_id, store_id) is not None
 
 
 async def get_db(request: Request):  # type: ignore[no-untyped-def]
@@ -135,11 +169,32 @@ async def current_user(request: Request, db: Db) -> AuthUser:
 CurrentUser = Annotated[AuthUser, Depends(current_user)]
 
 
-async def staff_user(store_id: str, user: CurrentUser, db: Db) -> AuthUser:
-    """Requires the caller to be staff at the route's {store_id}."""
-    if not await is_staff(db, user.id, store_id):
+async def _require(
+    db: AsyncSession, user: AuthUser, store_id: str | None, roles: tuple[StaffRole, ...]
+) -> Staff:
+    staff = await staff_record(db, user.id, store_id)
+    if staff is None or staff.role not in roles:
         raise ApiError(403, "forbidden")
-    return user
+    if staff.must_change_password:
+        raise ApiError(403, "password_change_required")
+    return staff
 
 
-StaffUser = Annotated[AuthUser, Depends(staff_user)]
+async def floor_staff(store_id: str, user: CurrentUser, db: Db) -> Staff:
+    """Anyone on the store team at the route's {store_id}: the handheld's staff mode."""
+    return await _require(db, user, store_id, FLOOR)
+
+
+async def manager(store_id: str, user: CurrentUser, db: Db) -> Staff:
+    """Floor or store manager at the route's {store_id}: the manager dashboard."""
+    return await _require(db, user, store_id, MANAGERS)
+
+
+async def admin(user: CurrentUser, db: Db) -> Staff:
+    """The SmartCart admin team, who approve store-team accounts for every store."""
+    return await _require(db, user, None, (StaffRole.admin,))
+
+
+FloorStaff = Annotated[Staff, Depends(floor_staff)]
+Manager = Annotated[Staff, Depends(manager)]
+Admin = Annotated[Staff, Depends(admin)]

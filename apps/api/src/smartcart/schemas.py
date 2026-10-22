@@ -177,3 +177,75 @@ class ChatTurn(Wire):
 class AskRequest(Wire):
     message: str = Field(min_length=1, max_length=500)
     history: list[ChatTurn] = Field(default_factory=list, max_length=12)
+
+
+# ---- Two sides: store team, reservations, tasks ------------------------------------------------
+
+
+class StaffLoginRequest(Wire):
+    # Staff ID (S01-0042) or the registered mobile number.
+    login: str = Field(min_length=3, max_length=40)
+    password: str = Field(min_length=1, max_length=200)
+
+
+class ChangePasswordRequest(Wire):
+    current_password: str = Field(min_length=1, max_length=200)
+    new_password: str = Field(min_length=1, max_length=200)
+
+
+StaffRoleName = Literal["floor_staff", "manager"]
+
+
+class StaffCreateRequest(Wire):
+    full_name: str = Field(min_length=2, max_length=80)
+    phone: str = Field(min_length=10, max_length=20)
+    role: StaffRoleName
+    shift: str | None = Field(default=None, max_length=40)
+    employee_ref: str | None = Field(default=None, max_length=40)
+
+
+class StaffDeactivateRequest(Wire):
+    staff_id: str
+    reason: str = Field(min_length=3, max_length=300)
+
+
+class StaffReviewRequest(Wire):
+    action: Literal["approve", "reject", "request_changes"]
+    note: str | None = Field(default=None, max_length=300)
+
+
+class ReservationItemIn(Wire):
+    product_id: str
+    qty: int = Field(ge=1, le=20)
+
+
+class ReservationCreateRequest(Wire):
+    items: list[ReservationItemIn] = Field(min_length=1, max_length=30)
+    slot_start: datetime
+
+
+class ReservationPickedRequest(Wire):
+    cart_code: str = Field(min_length=3, max_length=20)
+
+
+class TaskCreateRequest(Wire):
+    type: Literal["restock", "stock_check", "other"]
+    title: str = Field(min_length=3, max_length=120)
+    note: str | None = Field(default=None, max_length=300)
+    product_id: str | None = None
+    assigned_to: str | None = None
+
+
+class TaskAssignRequest(Wire):
+    assigned_to: str | None
+
+
+class TaskDoneRequest(Wire):
+    # For a restock: units put on the shelf from the back store, added to stock on hand.
+    restocked: int | None = Field(default=None, ge=0, le=10_000)
+
+
+class StockCorrectionRequest(Wire):
+    barcode: str = Field(min_length=4, max_length=20)
+    counted: int = Field(ge=0, le=100_000)
+    reason: str = Field(min_length=3, max_length=200)

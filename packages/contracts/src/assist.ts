@@ -84,6 +84,8 @@ export const HelpRequest = z.object({
   note: z.string().nullable(),
   status: HelpStatus,
   shopperName: z.string().nullable(),
+  /** The floor assistant who took the request, so the shopper sees who is coming. */
+  staffName: z.string().nullable().optional(),
   createdAt: z.iso.datetime(),
   acknowledgedAt: z.iso.datetime().nullable(),
   resolvedAt: z.iso.datetime().nullable(),

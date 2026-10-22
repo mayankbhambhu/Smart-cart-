@@ -6,7 +6,7 @@ from fastapi import APIRouter, Query, Request
 
 from ..assist_service import AssistService
 from ..assistant import Assistant
-from ..auth import CurrentUser, Db, StaffUser
+from ..auth import CurrentUser, Db, Manager
 from ..schemas import AskRequest, HelpActionRequest, HelpCreateRequest, RouteListRequest
 
 router = APIRouter(prefix="/v1/stores/{store_id}")
@@ -74,7 +74,7 @@ async def shopper_help_action(
 
 @admin_router.get("/help")
 async def store_help(
-    store_id: str, _: StaffUser, request: Request, db: Db, openOnly: bool = True
+    store_id: str, _: Manager, request: Request, db: Db, openOnly: bool = True
 ) -> dict[str, Any]:
     """Help requests for staff screens, newest first: open ones, or everything from the last day."""
     return {
@@ -85,15 +85,15 @@ async def store_help(
 
 @admin_router.post("/help/{request_id}")
 async def staff_help_action(
-    store_id: str, request_id: str, body: HelpActionRequest, user: StaffUser, request: Request, db: Db
+    store_id: str, request_id: str, body: HelpActionRequest, user: Manager, request: Request, db: Db
 ) -> dict[str, Any]:
     view = await _assist(request).update_help(
-        db, store_id=store_id, request_id=request_id, action=body.action, actor_id=user.id, staff=True
+        db, store_id=store_id, request_id=request_id, action=body.action, actor_id=user.user_id, staff=True
     )
     return view.wire()
 
 
 @admin_router.get("/insights")
-async def insights(store_id: str, _: StaffUser, request: Request, db: Db, days: int = 7) -> dict[str, Any]:
+async def insights(store_id: str, _: Manager, request: Request, db: Db, days: int = 7) -> dict[str, Any]:
     """What shoppers searched for and didn't find, and how floor help is going."""
     return await _assist(request).insights(db, store_id, days)

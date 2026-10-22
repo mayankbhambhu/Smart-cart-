@@ -33,6 +33,12 @@ class Settings(BaseSettings):
     # Ask SmartCart uses Claude when this is set; without it the assistant answers by rules from the
     # same store facts. From the environment (Secrets Manager in AWS), never from code or chat.
     anthropic_api_key: str | None = None
+    # Signs the session tokens the API issues to store-team members after a password sign-in.
+    # At least 32 random characters, from the environment; a fixed dev value is used outside production.
+    session_secret: str | None = None
+    # How staff get their temporary password by SMS. "log" writes it to the API log and returns it to
+    # the approving admin, for development and demos only; a real SMS provider is still to be chosen.
+    sms_provider: Literal["log"] = "log"
     # Use the Socket.IO Redis manager so any API instance can deliver to any room.
     realtime_redis: bool = True
 
@@ -49,8 +55,12 @@ class Settings(BaseSettings):
                 "PAYMENT_PROVIDER=stripe needs STRIPE_SECRET_KEY, STRIPE_PUBLISHABLE_KEY "
                 "and STRIPE_WEBHOOK_SECRET"
             )
+        if self.env == "production" and (not self.session_secret or len(self.session_secret) < 32):
+            raise ValueError("SESSION_SECRET (32+ characters) is required in production")
         if self.env == "production" and self.payment_provider == "fake":
             raise ValueError("PAYMENT_PROVIDER=fake is not allowed in production")
+        if self.env == "production" and self.sms_provider == "log":
+            raise ValueError("SMS_PROVIDER=log is not allowed in production")
         return self
 
     @property
@@ -61,6 +71,10 @@ class Settings(BaseSettings):
             if url.startswith(prefix):
                 return "postgresql+asyncpg://" + url[len(prefix) :]
         return url
+
+    @property
+    def signing_secret(self) -> str:
+        return self.session_secret or "dev-only-session-secret-not-for-production"
 
     @property
     def cors_origin_list(self) -> list[str]:
