@@ -3,6 +3,7 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 import { colors } from "../lib/theme";
 
 const TILES: { href: Href; icon: string; title: string; sub: string }[] = [
+  { href: "/browse", icon: "🥦", title: "Sections", sub: "Browse by aisle" },
   { href: "/find", icon: "🔎", title: "Find", sub: "Aisle, shelf, stock" },
   { href: "/list", icon: "📝", title: "Smart list", sub: "Shortest route" },
   { href: "/ask", icon: "💬", title: "Ask", sub: "SmartCart AI" },
@@ -29,8 +30,8 @@ export function FindItFast() {
 }
 
 const styles = StyleSheet.create({
-  row: { flexDirection: "row", gap: 8 },
-  tile: { flex: 1, backgroundColor: colors.surface, borderRadius: 14, padding: 12, borderWidth: 1, borderColor: colors.border, gap: 2 },
+  row: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  tile: { flexBasis: "22%", flexGrow: 1, minWidth: 140, backgroundColor: colors.surface, borderRadius: 14, padding: 12, borderWidth: 1, borderColor: colors.border, gap: 2 },
   icon: { fontSize: 22 },
   title: { fontSize: 15, fontWeight: "600", color: colors.text },
   sub: { fontSize: 12, color: colors.muted },

@@ -104,8 +104,8 @@ barcode,name,brand,category,hsn_code,gst_rate_bp,weight_g,mrp_paise,price_paise,
 2000000001036,Haldiram's Aloo Bhujia 400 g,Haldiram's,Chips and namkeen,2106,500,400,10500,10400,C2,1,79,10,,veg
 2000000001043,Bikaji Aloo Bhujia 200 g,Bikaji,Chips and namkeen,2106,500,200,5500,5100,C2,2,92,10,,veg
 2000000001050,Bikaji Aloo Bhujia 400 g,Bikaji,Chips and namkeen,2106,500,400,10500,8900,C2,3,6,10,,veg
-2000000001067,Cadbury Dairy Milk Chocolate 50 g,Cadbury Dairy Milk,Milk,1806,500,50,5000,4700,C2,4,38,10,jain,veg
-2000000001074,Cadbury Dairy Milk Chocolate 150 g,Cadbury Dairy Milk,Milk,1806,500,150,14000,12200,C2,5,51,10,jain,veg
+2000000001067,Cadbury Dairy Milk Chocolate 50 g,Cadbury Dairy Milk,Chocolates,1806,500,50,5000,4700,C2,4,38,10,jain,veg
+2000000001074,Cadbury Dairy Milk Chocolate 150 g,Cadbury Dairy Milk,Chocolates,1806,500,150,14000,12200,C2,5,51,10,jain,veg
 2000000001081,Nestle KitKat Chocolate 50 g,Nestle KitKat,Chocolates,1806,500,50,5000,4800,C2,6,64,10,jain,veg
 2000000001098,Nestle KitKat Chocolate 150 g,Nestle KitKat,Chocolates,1806,500,150,14000,12500,C2,1,77,10,jain,veg
 2000000001104,Amul Chocolate 50 g,Amul,Chocolates,1806,500,50,5000,4900,C2,2,90,10,jain,veg
@@ -191,10 +191,10 @@ barcode,name,brand,category,hsn_code,gst_rate_bp,weight_g,mrp_paise,price_paise,
 2000000001906,Bisleri Packaged Drinking Water 5 L,Bisleri,Water,2201,500,5000,7500,7400,C1,4,90,10,jain;no_added_sugar,veg
 2000000001913,Kinley Packaged Drinking Water 1 L,Kinley,Water,2201,500,1000,2000,1800,C1,5,23,10,jain;no_added_sugar,veg
 2000000001920,Kinley Packaged Drinking Water 5 L,Kinley,Water,2201,500,5000,7500,7500,C1,6,36,10,jain;no_added_sugar,veg
-2000000001937,Parachute Hair Oil 200 ml,Parachute,Oils and ghee,3305,500,190,11000,10200,D1,1,49,10,,not_food
-2000000001944,Parachute Hair Oil 500 ml,Parachute,Oils and ghee,3305,500,470,25000,21500,D1,2,62,10,,not_food
-2000000001951,Dabur Amla Hair Oil 200 ml,Dabur Amla,Oils and ghee,3305,500,190,11000,10500,D1,3,6,10,,not_food
-2000000001968,Dabur Amla Hair Oil 500 ml,Dabur Amla,Oils and ghee,3305,500,470,25000,22000,D1,4,88,10,,not_food
+2000000001937,Parachute Hair Oil 200 ml,Parachute,Hair care,3305,500,190,11000,10200,D1,1,49,10,,not_food
+2000000001944,Parachute Hair Oil 500 ml,Parachute,Hair care,3305,500,470,25000,21500,D1,2,62,10,,not_food
+2000000001951,Dabur Amla Hair Oil 200 ml,Dabur Amla,Hair care,3305,500,190,11000,10500,D1,3,6,10,,not_food
+2000000001968,Dabur Amla Hair Oil 500 ml,Dabur Amla,Hair care,3305,500,470,25000,22000,D1,4,88,10,,not_food
 2000000001975,Dettol Handwash 200 ml,Dettol,Bath and handwash,3401,500,210,9900,9600,D1,5,21,10,,not_food
 2000000001982,Dettol Handwash 750 ml refill,Dettol,Bath and handwash,3401,500,780,19900,17900,D1,6,34,10,,not_food
 2000000001999,Lifebuoy Handwash 200 ml,Lifebuoy,Bath and handwash,3401,500,210,9900,9800,D1,1,47,10,,not_food

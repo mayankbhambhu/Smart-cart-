@@ -14,12 +14,14 @@ const DIETS: { tag: DietTag; label: string }[] = [
   { tag: "no_added_sugar", label: "No added sugar" },
 ];
 
+
 /** US-02, US-03, US-04, US-05: find a product's aisle and shelf, filter by diet, compare per kg. */
 export default function FindScreen() {
   const storeId = useAssist((s) => s.storeId);
   const [text, setText] = useState("");
   const [query, setQuery] = useState("");
-  const [diet, setDiet] = useState<DietTag[]>([]);
+  // Starts from the shopper's saved diet preference.
+  const [diet, setDiet] = useState<DietTag[]>(() => useAssist.getState().dietPref);
 
   // Search as the shopper types, after a short pause.
   useEffect(() => {

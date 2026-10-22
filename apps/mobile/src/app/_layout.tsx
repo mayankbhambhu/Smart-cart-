@@ -11,7 +11,11 @@ import { colors } from "../lib/theme";
 export default function RootLayout() {
   const [queryClient] = useState(() => new QueryClient());
   const ready = useAuth((s) => s.ready);
-  const signedIn = useAuth((s) => s.session !== null);
+  const session = useAuth((s) => s.session);
+  const signedIn = session !== null;
+  // The account decides the side: a store-team sign-in only ever reaches staff mode.
+  const staff = session?.kind === "staff";
+  const mustChange = staff && session.mustChangePassword;
 
   useEffect(() => {
     void useAuth.getState().restore();
@@ -32,7 +36,7 @@ export default function RootLayout() {
         {DEMO && (
           <View style={{ backgroundColor: "#FEF3C7", paddingVertical: 6, paddingHorizontal: 12 }}>
             <Text style={{ color: "#78350F", fontSize: 12, textAlign: "center" }}>
-              Demo: a simulated store in your browser. No real payments. Open the dashboard demo alongside to play staff.
+              Demo: a simulated store in your browser. No real payments. Sign in as Store team to play staff, or open the dashboard demo alongside.
             </Text>
           </View>
         )}
@@ -40,8 +44,17 @@ export default function RootLayout() {
           <Stack.Protected guard={!signedIn}>
             <Stack.Screen name="sign-in" options={{ headerShown: false }} />
           </Stack.Protected>
-          <Stack.Protected guard={signedIn}>
+          <Stack.Protected guard={staff && mustChange}>
+            <Stack.Screen name="change-password" options={{ title: "Set your password" }} />
+          </Stack.Protected>
+          <Stack.Protected guard={staff && !mustChange}>
+            <Stack.Screen name="staff" options={{ headerShown: false }} />
+          </Stack.Protected>
+          <Stack.Protected guard={signedIn && !staff}>
             <Stack.Screen name="index" options={{ title: "Smart Cart" }} />
+            <Stack.Screen name="browse/index" options={{ title: "Shop by section" }} />
+            <Stack.Screen name="browse/[section]" options={{ title: "Section" }} />
+            <Stack.Screen name="reserve" options={{ title: "Reserve for pickup" }} />
             <Stack.Screen name="pair" options={{ title: "Pair a cart" }} />
             <Stack.Screen name="cart/index" options={{ title: "Your cart" }} />
             <Stack.Screen name="cart/scan" options={{ title: "Scan items", presentation: "modal" }} />

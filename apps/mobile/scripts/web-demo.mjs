@@ -27,7 +27,10 @@ for (const file of readdirSync(jsDir)) {
 // One copy of the page per screen, so reloading or sharing e.g. /app/cart/ works on a static host.
 // Each copy knows how deep it sits, so it can work out the app's folder from its own address.
 const template = readFileSync(join(out, "index.html"), "utf8");
-const screens = ["", "sign-in", "pair", "find", "list", "ask", "help", "cart", "cart/scan", "cart/checkout"];
+const screens = [
+  "", "sign-in", "change-password", "pair", "find", "list", "ask", "help", "cart", "cart/scan", "cart/checkout",
+  "browse", "reserve", "staff", "staff/help", "staff/picklist", "staff/tasks", "staff/stock", "staff/exit",
+];
 for (const screen of screens) {
   const depth = screen ? screen.split("/").length : 0;
   const html = template.replaceAll(`${PLACEHOLDER}/`, "../".repeat(depth) || "./").replace(

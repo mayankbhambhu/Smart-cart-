@@ -20,7 +20,9 @@ export function HelpBanner({ compact }: { compact?: boolean }) {
     <Pressable accessibilityRole="button" onPress={() => router.push("/help")} style={[styles.status, compact && styles.compact]}>
       <View style={[styles.dot, { backgroundColor: help.status === "open" ? "#F59E0B" : colors.brand }]} />
       <Text style={styles.statusText}>
-        {help.status === "open" ? "Help requested. Finding a staff member…" : "A staff member is on the way"}
+        {help.status === "open"
+          ? "Help requested. Finding a staff member…"
+          : `${help.staffName ?? "A staff member"} is on the way`}
         {help.aisle ? ` · Aisle ${help.aisle}` : ""}
       </Text>
     </Pressable>

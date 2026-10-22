@@ -19,6 +19,8 @@ type CartState = {
 
   resume: () => Promise<void>;
   pair: (cartCode: string, storeId: string) => Promise<void>;
+  /** A cart the server already paired, e.g. the parked cart of a collected reservation. */
+  adopt: (cart: CartSnapshot) => void;
   add: (barcode: string, qty: number, requestId: string) => Promise<LineChange>;
   removeOne: (productId: string) => Promise<void>;
   removeAll: (productId: string) => Promise<void>;
@@ -90,6 +92,7 @@ export const useCart = create<CartState>((set, get) => {
     },
 
     pair: async (cartCode, storeId) => open(await api.pair(cartCode, storeId)),
+    adopt: (cart) => open(cart),
 
     add: async (barcode, qty, requestId) => {
       const cart = get().cart;
