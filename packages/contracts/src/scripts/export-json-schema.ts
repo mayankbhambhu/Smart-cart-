@@ -1,15 +1,24 @@
-// Writes JSON Schema for the shared contracts so the Flutter app can generate Dart models.
+// Writes JSON Schema for the shared contracts. The Python API tests validate against these.
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { z } from "zod";
 import { AddItemRequest, CartSnapshot, PairCartRequest } from "../cart.js";
 import { SmartCartEvent } from "../events.js";
+import { CheckoutResponse, ExitCheckResponse, Receipt } from "../order.js";
 
 const outDir = join(dirname(fileURLToPath(import.meta.url)), "../../schema");
 mkdirSync(outDir, { recursive: true });
 
-const schemas = { CartSnapshot, PairCartRequest, AddItemRequest, SmartCartEvent };
+const schemas = {
+  CartSnapshot,
+  PairCartRequest,
+  AddItemRequest,
+  SmartCartEvent,
+  Receipt,
+  CheckoutResponse,
+  ExitCheckResponse,
+};
 for (const [name, schema] of Object.entries(schemas)) {
   const json = z.toJSONSchema(schema, { io: "input", unrepresentable: "any" });
   writeFileSync(join(outDir, `${name}.schema.json`), JSON.stringify(json, null, 2) + "\n");

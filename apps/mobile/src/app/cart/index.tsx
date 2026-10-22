@@ -10,6 +10,7 @@ import { colors } from "../../lib/theme";
 const endedText: Record<string, string> = {
   abandoned: "Your cart was released after 30 minutes without activity.",
   cancelled: "You left the cart. Nothing was charged.",
+  paid: "Paid. Your receipt is in Past receipts on the home screen.",
 };
 
 /** The live cart: every line, GST and the running total, all as the server computed them. */
@@ -39,6 +40,9 @@ export default function LiveCartScreen() {
         },
       },
     ]);
+
+  // Set while an order is waiting for payment: the cart is frozen until the shopper pays or goes back.
+  const paying = cart.status === "checking_out";
 
   const safeRemove = (fn: () => Promise<void>) => () => {
     fn().catch(() => Alert.alert("Could not update the cart", "Check your connection and try again."));
@@ -71,8 +75,13 @@ export default function LiveCartScreen() {
       />
       <View style={[styles.footer, { paddingBottom: 12 + insets.bottom }]}>
         <Totals totals={cart.totals} />
-        <Button title="Scan item" onPress={() => router.push("/cart/scan")} />
-        <Button title="Checkout (next milestone)" variant="secondary" disabled onPress={() => {}} />
+        <Button title="Scan item" disabled={paying} onPress={() => router.push("/cart/scan")} />
+        <Button
+          title={paying ? "Continue to payment" : "Checkout"}
+          variant="secondary"
+          disabled={cart.lines.length === 0}
+          onPress={() => router.push("/cart/checkout")}
+        />
         <Pressable accessibilityRole="button" onPress={confirmLeave} style={styles.leave}>
           <Text style={styles.leaveText}>Leave cart without buying</Text>
         </Pressable>

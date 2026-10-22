@@ -37,6 +37,8 @@ export default function RootLayout() {
             <Stack.Screen name="pair" options={{ title: "Pair a cart" }} />
             <Stack.Screen name="cart/index" options={{ title: "Your cart" }} />
             <Stack.Screen name="cart/scan" options={{ title: "Scan items", presentation: "modal" }} />
+            <Stack.Screen name="cart/checkout" options={{ title: "Checkout" }} />
+            <Stack.Screen name="receipt/[orderId]" options={{ title: "Receipt" }} />
           </Stack.Protected>
         </Stack>
       </QueryClientProvider>

@@ -16,6 +16,7 @@ export function withLine(
 export type CartEventOutcome =
   | { kind: "cart"; cart: CartSnapshot }
   | { kind: "ended"; reason: string }
+  | { kind: "paid"; orderId: string }
   | { kind: "ignore" };
 
 /** How a server event changes the shopper's cart. Pure, so it is easy to test. */
@@ -29,6 +30,12 @@ export function applyEvent(cart: CartSnapshot | null, event: SmartCartEvent): Ca
     case "cart.item_removed":
       if (!cart || event.data.sessionId !== cart.sessionId) return { kind: "ignore" };
       return { kind: "cart", cart: withLine(cart, event.data.productId, event.data.line, event.data.totals) };
+    case "cart.checked_out":
+      if (!cart || event.data.sessionId !== cart.sessionId) return { kind: "ignore" };
+      return { kind: "cart", cart: { ...cart, status: "checking_out", totals: event.data.totals } };
+    case "order.paid":
+      if (!cart || event.data.sessionId !== cart.sessionId) return { kind: "ignore" };
+      return { kind: "paid", orderId: event.data.orderId };
     case "cart.session_ended":
       if (!cart || event.data.sessionId !== cart.sessionId) return { kind: "ignore" };
       return { kind: "ended", reason: event.data.reason };

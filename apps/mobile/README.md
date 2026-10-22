@@ -29,7 +29,12 @@ scripts/smoke.ts    drives the API client and realtime code against a running AP
 5. Scan items. The demo barcodes are synthetic (`2000000000015` is Amul Toned Milk 500 ml);
    print some from `apps/api/src/smartcart/data/products.csv` or type them in.
 
-Open the dashboard's **Active carts** page alongside to watch the cart update live.
+6. Tap **Checkout**, review the locked prices and GST, and tap **Pay**. With the API's default test
+   payment no money moves; with Stripe test mode, pay with card `4242 4242 4242 4242`, any future
+   date and any CVC. The receipt shows the exit QR and code.
+
+Open the dashboard's **Active carts** and **Orders** pages alongside to watch the cart and the order
+update live, and check the exit code on the Orders page.
 
 ## Checks
 

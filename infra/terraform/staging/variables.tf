@@ -39,3 +39,13 @@ variable "redis_node_type" {
   type    = string
   default = "cache.t4g.micro"
 }
+
+variable "firebase_project_id" {
+  description = "Firebase project whose ID tokens the API accepts (not a secret)."
+  type        = string
+}
+
+variable "stripe_publishable_key" {
+  description = "Stripe publishable key (pk_test_... for staging). Not a secret; the app receives it."
+  type        = string
+}

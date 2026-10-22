@@ -29,6 +29,22 @@ export function StoreEventsProvider({ children }: { children: ReactNode }) {
         case "cart.session_ended":
           void queryClient.invalidateQueries({ queryKey: ["carts", STORE_ID] });
           break;
+        case "cart.checked_out":
+          queryClient.setQueryData<{ sessions: ActiveCart[] }>(["carts", STORE_ID], (old) =>
+            old && {
+              ...old,
+              sessions: old.sessions.map((s) =>
+                s.sessionId === event.data.sessionId
+                  ? { ...s, status: "checking_out", totals: event.data.totals }
+                  : s,
+              ),
+            },
+          );
+          void queryClient.invalidateQueries({ queryKey: ["orders", STORE_ID] });
+          break;
+        case "order.paid":
+          void queryClient.invalidateQueries({ queryKey: ["orders", STORE_ID] });
+          break;
         case "cart.item_added":
         case "cart.item_removed":
           queryClient.setQueryData<{ sessions: ActiveCart[] }>(["carts", STORE_ID], (old) =>

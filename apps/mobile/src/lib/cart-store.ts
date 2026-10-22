@@ -1,4 +1,4 @@
-import type { CartSnapshot } from "@smart-cart/contracts";
+import type { CartSnapshot, CheckoutResponse } from "@smart-cart/contracts";
 import * as Crypto from "expo-crypto";
 import { create } from "zustand";
 import { api, type LineChange } from "./api";
@@ -13,6 +13,8 @@ type CartState = {
   live: boolean;
   /** Set when the session ended (cancelled, abandoned, paid). */
   endedReason: string | null;
+  /** The order paid for most recently, so the app can show its receipt. */
+  paidOrderId: string | null;
 
   resume: () => Promise<void>;
   pair: (cartCode: string, storeId: string) => Promise<void>;
@@ -20,6 +22,9 @@ type CartState = {
   removeOne: (productId: string) => Promise<void>;
   removeAll: (productId: string) => Promise<void>;
   leave: () => Promise<void>;
+  checkout: () => Promise<CheckoutResponse>;
+  backToCart: (orderId: string) => Promise<void>;
+  markPaid: (orderId: string) => void;
   reset: () => void;
 };
 
@@ -43,6 +48,7 @@ export const useCart = create<CartState>((set, get) => {
         const outcome = applyEvent(get().cart, event);
         if (outcome.kind === "cart") set({ cart: outcome.cart });
         if (outcome.kind === "ended") close(outcome.reason);
+        if (outcome.kind === "paid") get().markPaid(outcome.orderId);
       },
     });
   };
@@ -51,6 +57,11 @@ export const useCart = create<CartState>((set, get) => {
     disconnect?.();
     disconnect = null;
     set({ cart: null, live: false, endedReason: reason });
+  };
+
+  const setStatus = (status: CartSnapshot["status"]) => {
+    const cart = get().cart;
+    if (cart) set({ cart: { ...cart, status } });
   };
 
   const applyChange = (productId: string, change: LineChange) => {
@@ -68,6 +79,7 @@ export const useCart = create<CartState>((set, get) => {
     cart: null,
     live: false,
     endedReason: null,
+    paidOrderId: null,
 
     resume: async () => {
       const cart = await api.myCart();
@@ -94,10 +106,28 @@ export const useCart = create<CartState>((set, get) => {
       close("cancelled");
     },
 
+    checkout: async () => {
+      const cart = get().cart;
+      if (!cart) throw new Error("no open cart");
+      const res = await api.checkout(cart.sessionId);
+      setStatus("checking_out");
+      return res;
+    },
+
+    backToCart: async (orderId) => {
+      await api.backToCart(orderId);
+      setStatus("active");
+    },
+
+    markPaid: (orderId) => {
+      if (get().cart) close("paid");
+      set({ paidOrderId: orderId });
+    },
+
     reset: () => {
       disconnect?.();
       disconnect = null;
-      set({ cart: null, live: false, endedReason: null });
+      set({ cart: null, live: false, endedReason: null, paidOrderId: null });
     },
   };
 });

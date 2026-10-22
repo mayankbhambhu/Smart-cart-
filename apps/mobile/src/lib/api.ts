@@ -1,4 +1,4 @@
-import type { CartLine, CartSnapshot, CartTotals } from "@smart-cart/contracts";
+import type { CartLine, CartSnapshot, CartTotals, CheckoutResponse, Receipt } from "@smart-cart/contracts";
 import { API_URL } from "./config";
 
 /** An error response from the API, with its machine-readable code ("cart_in_use", ...). */
@@ -75,4 +75,12 @@ export const api = {
       `/v1/carts/${sessionId}/items/${productId}?qty=${qty}&requestId=${requestId}`,
     ),
   cancel: (sessionId: string) => request<{ ok: true }>("POST", `/v1/carts/${sessionId}/cancel`, {}),
+
+  /** Freezes the cart into an order and starts payment. Calling it again resumes the same order. */
+  checkout: (sessionId: string) => request<CheckoutResponse>("POST", `/v1/carts/${sessionId}/checkout`, {}),
+  order: (orderId: string) => request<Receipt>("GET", `/v1/orders/${orderId}`),
+  backToCart: (orderId: string) => request<{ ok: true }>("POST", `/v1/orders/${orderId}/back-to-cart`, {}),
+  /** Only when the API runs with PAYMENT_PROVIDER=fake (development and demos). */
+  payFake: (orderId: string) => request<Receipt>("POST", `/v1/orders/${orderId}/pay/fake`, {}),
+  myOrders: () => request<{ orders: Receipt[] }>("GET", "/v1/me/orders").then((r) => r.orders),
 };

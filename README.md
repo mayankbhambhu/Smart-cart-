@@ -67,7 +67,24 @@ curl -s -X POST localhost:4000/v1/carts/<sessionId>/items -H "$T" -H 'content-ty
   -d "{\"barcode\":\"2000000000015\",\"qty\":2,\"requestId\":\"$(uuidgen)\"}"
 ```
 
-Open http://localhost:3000/carts to watch the cart appear and its total update live.
+Open http://localhost:3000/carts to watch the cart appear and its total update live. Then pay:
+
+```sh
+curl -s -X POST localhost:4000/v1/carts/<sessionId>/checkout -H "$T"     # returns the orderId
+curl -s -X POST localhost:4000/v1/orders/<orderId>/pay/fake -H "$T"      # receipt with exitCode
+```
+
+The order shows up on http://localhost:3000/orders, where the exit check accepts the code once.
+
+## Payments
+
+The API talks to payment providers through one `PaymentProvider` interface
+(`apps/api/src/smartcart/payments.py`). With `PAYMENT_PROVIDER=fake` (the default outside
+production) orders are paid by a test call and no money moves, so the whole flow can be demoed
+without a Stripe account. With `PAYMENT_PROVIDER=stripe` the app opens Stripe's PaymentSheet and the
+order is marked paid only when Stripe's signed webhook says so. To try Stripe test mode locally, put
+your test keys in `apps/api/.env` and forward webhooks with the Stripe CLI:
+`stripe listen --forward-to localhost:4000/v1/payments/stripe/webhook`.
 
 ## Tests
 
@@ -95,7 +112,8 @@ be checked before the pilot.
    dashboard, Flutter shell, Terraform for staging, CI.
 2. **Scan to cart**: sign-in, pair by QR, camera scanning, live cart over WebSocket, live
    Active carts page. The shopper app is React Native (Expo).
-3. Pay and leave: Stripe test-mode checkout, webhook, e-receipt and exit QR.
+3. **Pay and leave**: checkout, Stripe test-mode payment (or the built-in test payment), webhook,
+   e-receipt with GST summary, one-time exit QR, and the dashboard's Orders page and exit check.
 4. Store view: live dashboard pages for carts and orders, low-stock alerts.
 5. Pilot hardening: reconnects, idempotency, rate limits, Sentry, a 20-shopper usability test.
 

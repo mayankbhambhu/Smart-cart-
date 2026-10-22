@@ -6,8 +6,10 @@ from sqlalchemy.orm import selectinload
 
 from ..auth import Db, StaffUser
 from ..cart_service import CartService
+from ..checkout_service import CheckoutService
 from ..models import Inventory, Product
 from ..pricing import current_prices
+from ..schemas import ExitCheckRequest
 
 router = APIRouter(prefix="/admin/v1")
 
@@ -66,3 +68,19 @@ async def carts(store_id: str, _: StaffUser, db: Db, request: Request) -> dict[s
     """Dashboard: open cart sessions with shopper, item count and running total."""
     service: CartService = request.app.state.carts
     return {"storeId": store_id, "sessions": await service.active_in_store(db, store_id)}
+
+
+@router.get("/stores/{store_id}/orders")
+async def orders(store_id: str, _: StaffUser, db: Db, request: Request) -> dict[str, Any]:
+    """Recent orders for the dashboard, newest first."""
+    service: CheckoutService = request.app.state.checkout
+    return {"storeId": store_id, "orders": await service.store_orders(db, store_id)}
+
+
+@router.post("/stores/{store_id}/exit-checks")
+async def exit_check(
+    store_id: str, body: ExitCheckRequest, _: StaffUser, db: Db, request: Request
+) -> dict[str, Any]:
+    """Staff at the door check a shopper's exit code (typed, or the scanned exit QR)."""
+    service: CheckoutService = request.app.state.checkout
+    return (await service.check_exit(db, store_id, body.code)).wire()

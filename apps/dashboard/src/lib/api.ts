@@ -25,6 +25,20 @@ export async function apiGet<T>(path: string): Promise<T> {
   return res.json() as Promise<T>;
 }
 
+export async function apiPost<T>(path: string, body: unknown): Promise<T> {
+  if (DEMO) {
+    const { demoStore } = await import("./demo/store");
+    return demoStore().post(path, body) as Promise<T>;
+  }
+  const res = await fetch(`${API_URL}${path}`, {
+    method: "POST",
+    headers: { authorization: `Bearer ${AUTH_TOKEN}`, "content-type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error(`POST ${path} failed: ${res.status}`);
+  return res.json() as Promise<T>;
+}
+
 export const formatInr = (paise: number | null) =>
   paise === null
     ? "—"
@@ -56,4 +70,17 @@ export type ActiveCart = {
   status: "active" | "checking_out";
   startedAt: string;
   totals: Totals;
+};
+
+export type OrderRow = {
+  orderId: string;
+  cartCode: string;
+  shopperName: string | null;
+  status: "pending_payment" | "paid" | "cancelled" | "refunded";
+  totalPaise: number;
+  taxPaise: number;
+  itemCount: number;
+  exitCode: string | null;
+  exitUsedAt: string | null;
+  createdAt: string;
 };

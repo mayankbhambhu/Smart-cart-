@@ -24,6 +24,12 @@ class Settings(BaseSettings):
     firebase_project_id: str | None = None
     # Minutes a cart session can sit idle before it is abandoned and its reservations released.
     cart_idle_minutes: int = 30
+    # fake: payments complete via a confirm call, for development. stripe: Stripe PaymentIntents.
+    # The Stripe keys come from the environment (Secrets Manager in AWS), never from code or chat.
+    payment_provider: Literal["fake", "stripe"] = "fake"
+    stripe_secret_key: str | None = None
+    stripe_publishable_key: str | None = None
+    stripe_webhook_secret: str | None = None
     # Use the Socket.IO Redis manager so any API instance can deliver to any room.
     realtime_redis: bool = True
 
@@ -33,6 +39,15 @@ class Settings(BaseSettings):
             raise ValueError("FIREBASE_PROJECT_ID is required when AUTH_MODE=firebase")
         if self.env == "production" and self.auth_mode == "dev":
             raise ValueError("AUTH_MODE=dev is not allowed in production")
+        if self.payment_provider == "stripe" and not (
+            self.stripe_secret_key and self.stripe_publishable_key and self.stripe_webhook_secret
+        ):
+            raise ValueError(
+                "PAYMENT_PROVIDER=stripe needs STRIPE_SECRET_KEY, STRIPE_PUBLISHABLE_KEY "
+                "and STRIPE_WEBHOOK_SECRET"
+            )
+        if self.env == "production" and self.payment_provider == "fake":
+            raise ValueError("PAYMENT_PROVIDER=fake is not allowed in production")
         return self
 
     @property
