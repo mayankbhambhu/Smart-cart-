@@ -1,6 +1,7 @@
 packages:
   - apps/api
   - apps/dashboard
+  - apps/mobile
   - packages/*
 onlyBuiltDependencies:
   - "@prisma/client"

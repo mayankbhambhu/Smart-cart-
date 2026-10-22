@@ -12,7 +12,7 @@ Architecture: [docs/architecture.md](docs/architecture.md).
 apps/
   api/          Node 22 + TypeScript, Fastify, Prisma (PostgreSQL), Redis
   dashboard/    Next.js 15 + Tailwind: store staff dashboard
-  mobile/       Flutter app for Android and iPhone
+  mobile/       React Native (Expo) app for Android and iPhone
 packages/
   contracts/    Shared event and API schemas (zod), exported as JSON Schema for Dart
 infra/
@@ -23,7 +23,7 @@ docs/
 
 ## Run it locally
 
-Needs Node 22, pnpm 10 and Docker. Flutter 3.x for the mobile app.
+Needs Node 22, pnpm 10 and Docker. The mobile app runs in Expo Go on your phone.
 
 ```sh
 pnpm install
@@ -66,7 +66,7 @@ Open http://localhost:3000/carts to watch the cart appear and its total update l
 ```sh
 pnpm typecheck
 pnpm test             # API integration tests run when DATABASE_URL and REDIS_URL are set
-cd apps/mobile && flutter analyze && flutter test
+pnpm --filter @smart-cart/mobile export:check   # Android and iOS bundles
 ```
 
 ## Demo data
@@ -82,10 +82,10 @@ be checked before the pilot. Regenerate the file with `pnpm --filter @smart-cart
 
 ## V1 milestones
 
-1. **Skeleton** (this): monorepo, schema, seed, API health and catalogue lookup, inventory
+1. **Skeleton**: monorepo, schema, seed, API health and catalogue lookup, inventory
    dashboard, Flutter shell, Terraform for staging, CI.
-2. Scan to cart: sign-in, pair by QR, camera scanning, live cart over WebSocket.
-   The API and dashboard side is done; the shopper app is moving from Flutter to React.
+2. **Scan to cart**: sign-in, pair by QR, camera scanning, live cart over WebSocket, live
+   Active carts page. The shopper app is React Native (Expo).
 3. Pay and leave: Stripe test-mode checkout, webhook, e-receipt and exit QR.
 4. Store view: live dashboard pages for carts and orders, low-stock alerts.
 5. Pilot hardening: reconnects, idempotency, rate limits, Sentry, a 20-shopper usability test.
