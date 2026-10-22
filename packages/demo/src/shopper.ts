@@ -3,9 +3,12 @@
  * browser, so the real app can run as a clickable web page with no server (GitHub Pages, previews).
  *
  * When the store dashboard demo is open in the same browser (same site), the two talk over a
- * BroadcastChannel: the shopper's cart, payment and help requests show up on the dashboard, and
- * staff pressing "I'm on my way" there updates the app. Without a dashboard, a simulated floor
- * assistant answers help requests after a short wait.
+ * BroadcastChannel: the shopper's cart, payment, help requests and reservations show up on the
+ * dashboard, and staff pressing "I'm on my way" there updates the app. Without a dashboard, a
+ * simulated floor assistant answers help requests and picks reservations after a short wait.
+ *
+ * The same app also runs in store-team mode: sign in with a demo staff ID (see DEMO_LOGINS) to work
+ * the help inbox, pick list, tasks, stock checks and exit checks against this simulated store.
  */
 import type {
   AskResponse,
@@ -17,12 +20,16 @@ import type {
   HelpTopic,
   Receipt,
   RouteListResponse,
+  Reservation,
   SearchResult,
   SmartCartEvent,
+  StaffAccount,
 } from "@smart-cart/contracts";
 import { catalog } from "./catalog.js";
+import { DemoApiError } from "./errors.js";
 import { retrieve, routeList, rulesAnswer, search } from "./find.js";
 import { exitCode, gstIncluded } from "./money.js";
+import { DEMO_LOGINS, StoreTeam, type Caller } from "./team.js";
 import type { DemoProduct } from "./types.js";
 
 export const DEMO_CHANNEL = "smartcart-demo";
@@ -38,7 +45,9 @@ export type BridgeMessage =
   /** The app's carts and help requests so far, for a dashboard opened after they started. */
   | { kind: "sync"; sessions: BridgeSession[]; help: HelpRequest[] }
   | { kind: "event"; event: SmartCartEvent; shopperName?: string }
-  | { kind: "order"; order: BridgeOrder };
+  | { kind: "order"; order: BridgeOrder }
+  /** A store-team account approved in one demo tab, so the other can sign it in. Demo only. */
+  | { kind: "staff"; account: StaffAccount; password: string };
 
 export type BridgeSession = {
   sessionId: string;
@@ -63,14 +72,7 @@ export type BridgeOrder = {
   receipt: Receipt;
 };
 
-export class DemoApiError extends Error {
-  constructor(
-    readonly status: number,
-    readonly code: string,
-  ) {
-    super(code);
-  }
-}
+export { DemoApiError };
 
 type Session = {
   sessionId: string;
@@ -114,12 +116,28 @@ export class ShopperDemo {
   private listeners = new Map<string, Set<(e: SmartCartEvent) => void>>();
   private channel: BroadcastChannel | null = null;
   private dashboardSeenAt = 0;
+  readonly team: StoreTeam;
 
   constructor() {
     if (typeof BroadcastChannel !== "undefined") {
       this.channel = new BroadcastChannel(DEMO_CHANNEL);
       this.channel.onmessage = (m: MessageEvent<BridgeMessage>) => this.fromDashboard(m.data);
     }
+    this.team = new StoreTeam({
+      storeId: STORE_ID,
+      available: (id) => this.available(id),
+      onHand: (id) => this.onHand.get(id) ?? 0,
+      reservedQty: (id) => this.reserved.get(id) ?? 0,
+      hold: (id, delta) => this.reserved.set(id, (this.reserved.get(id) ?? 0) + delta),
+      setOnHand: (id, onHand) => {
+        this.onHand.set(id, onHand);
+        this.inventory(byId.get(id)!);
+      },
+      emit: (e) => this.fromTeam(e),
+      cartFree: (code) => ![...this.sessions.values()].some((s) => s.cartCode === code),
+      collect: (user, reservation) => this.collect(user, reservation),
+    });
+    this.team.onAccountCreated(({ account, password }) => this.post({ kind: "staff", account, password }));
   }
 
   /** True while a dashboard demo is open in this browser and answering help requests. */
@@ -160,7 +178,33 @@ export class ShopperDemo {
       return routeList((q) => this.find(q), (body as { lines: string[] }).lines) satisfies RouteListResponse;
     }
 
-    const user = this.user(token);
+    const caller = this.caller(token);
+    const forTeam = this.team.handle(method, url, body, caller);
+    if (forTeam !== undefined) return forTeam;
+    if (!caller) throw new DemoApiError(401, "unauthenticated");
+    const user = caller.kind === "staff" ? { id: caller.userId, name: caller.name } : caller;
+
+    // Floor staff on the handheld: help inbox and exit checks.
+    if (route("GET", /^\/staff\/v1\/stores\/[^/]+\/help$/)) {
+      this.staffOnly(caller);
+      const requests = this.help.filter((h) => h.status === "open" || h.status === "acknowledged").reverse();
+      return { storeId: STORE_ID, requests: requests.map((h) => this.wireHelp(h)) };
+    }
+    if ((match = route("POST", /^\/staff\/v1\/stores\/[^/]+\/help\/([^/]+)$/))) {
+      this.staffOnly(caller);
+      const h = this.help.find((x) => x.id === match![1]);
+      if (!h) throw new DemoApiError(404, "help_request_not_found");
+      if (h.status === "resolved" || h.status === "cancelled") throw new DemoApiError(409, "help_request_closed");
+      const action = (body as { action: string }).action;
+      h.staffName = user.name;
+      this.updateHelp(h, action === "resolve" ? "resolved" : "acknowledged", false);
+      return this.wireHelp(h);
+    }
+    if (route("POST", /^\/staff\/v1\/stores\/[^/]+\/exit-checks$/)) {
+      this.staffOnly(caller);
+      return this.exitCheck(String((body as { code?: string }).code ?? ""));
+    }
+
     if (route("GET", /^\/v1\/me\/cart$/)) {
       const s = this.openSession(user.id);
       return { session: s ? this.snapshot(s) : null };
@@ -233,9 +277,10 @@ export class ShopperDemo {
 
   // ---- cart -----------------------------------------------------------------------------------
 
-  private pair(user: { id: string; name: string }, cartCode: string): CartSnapshot {
+  private pair(user: { id: string; name: string }, cartCode: string, collecting = false): CartSnapshot {
     const code = cartCode.trim().toUpperCase();
     if (!/^C-\d{4}$/.test(code)) throw new DemoApiError(404, "cart_not_found");
+    if (!collecting && this.team.parkedCarts().includes(code)) throw new DemoApiError(409, "cart_reserved");
     const mine = this.openSession(user.id);
     if (mine) {
       if (mine.cartCode === code) return this.snapshot(mine);
@@ -395,13 +440,17 @@ export class ShopperDemo {
       createdAt: now(),
       acknowledgedAt: null as string | null,
       resolvedAt: null as string | null,
+      staffName: null as string | null | undefined,
       userId: user.id,
     };
     this.help.push(h);
     this.pushHelp(h, "help.requested", "phone");
-    // Without a dashboard open, a simulated floor assistant answers.
+    // Without a dashboard open or staff signed in here, a simulated floor assistant answers.
     setTimeout(() => {
-      if (!this.dashboardOpen && h.status === "open") this.updateHelp(h, "acknowledged", false);
+      if (!this.dashboardOpen && !this.team.staffSignedIn && h.status === "open") {
+        h.staffName = DEMO_LOGINS[0].name;
+        this.updateHelp(h, "acknowledged", false);
+      }
     }, 8_000);
     setTimeout(() => {
       if (!this.dashboardOpen && h.status === "acknowledged") this.updateHelp(h, "resolved", false);
@@ -452,11 +501,17 @@ export class ShopperDemo {
         });
       return;
     }
+    if (msg.kind === "staff") return this.team.adopt(msg.account, msg.password);
     if (msg.kind !== "event" || msg.event.type !== "help.updated") return;
     const evt = msg.event;
     const h = this.help.find((x) => x.id === evt.data.id);
     if (!h || h.status === evt.data.status) return;
-    Object.assign(h, { status: evt.data.status, acknowledgedAt: evt.data.acknowledgedAt, resolvedAt: evt.data.resolvedAt });
+    Object.assign(h, {
+      status: evt.data.status,
+      acknowledgedAt: evt.data.acknowledgedAt,
+      resolvedAt: evt.data.resolvedAt,
+      staffName: evt.data.staffName ?? h.staffName,
+    });
     const s = this.openSession(h.userId);
     if (s) this.listeners.get(s.sessionId)?.forEach((l) => l(evt));
   }
@@ -490,10 +545,49 @@ export class ShopperDemo {
     );
   }
 
-  private user(token: string | null) {
-    const m = token ? /^dev:([^:]+):?(.*)$/.exec(token) : null;
+  /** A store-team token issued by the demo's staff sign-in, or the app's dev token: dev:<uid>:<name>. */
+  private caller(token: string | null): Caller | null {
+    if (!token) return null;
+    const staff = this.team.staffFor(token);
+    if (staff) return staff;
+    const m = /^dev:([^:]+):?(.*)$/.exec(token);
     if (!m) throw new DemoApiError(401, "unauthenticated");
-    return { id: m[1]!, name: m[2] || "Shopper" };
+    return { kind: "shopper", id: m[1]!, name: m[2] || "Shopper" };
+  }
+
+  private staffOnly(caller: Caller) {
+    if (caller.kind !== "staff") throw new DemoApiError(403, "forbidden");
+    if (caller.account.mustChangePassword) throw new DemoApiError(403, "password_change_required");
+  }
+
+  // ---- store team -----------------------------------------------------------------------------
+
+  private fromTeam(e: SmartCartEvent) {
+    if (e.type === "reservation.created" || e.type === "reservation.updated") {
+      // Reservations show on the dashboard demo's board.
+      this.broadcast(e, e.data.shopperName ?? undefined);
+      if (e.type === "reservation.created" && !this.team.staffSignedIn) this.team.simulatePick(e.data.id);
+    }
+  }
+
+  /** Collecting a picked reservation: the shopper pairs the parked cart, which already holds the items. */
+  private collect(user: { id: string; name: string }, reservation: Reservation): CartSnapshot {
+    const cart = this.pair(user, reservation.cartCode!, true);
+    const s = this.sessions.get(cart.sessionId)!;
+    for (const item of reservation.items) {
+      const p = byId.get(item.productId);
+      if (p) this.add(s, p.barcode, item.qty, `reservation:${reservation.id}:${item.productId}`);
+    }
+    return this.snapshot(s);
+  }
+
+  private exitCheck(raw: string) {
+    const code = (raw.includes("code=") ? raw.split("code=")[1]! : raw).trim().toUpperCase();
+    const order = [...this.orders.values()].find((o) => o.exitCode === code && o.status === "paid");
+    if (!order) return { result: "not_found", order: null };
+    const result = order.exitUsedAt ? "already_used" : "ok";
+    order.exitUsedAt ??= new Date().toISOString();
+    return { result, order: this.publicOrder(order) };
   }
 
   private openSession(userId: string) {
