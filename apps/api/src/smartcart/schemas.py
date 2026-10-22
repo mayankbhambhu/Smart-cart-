@@ -148,3 +148,32 @@ class ExitCheckRequest(Wire):
 class ExitCheckResponse(Wire):
     result: Literal["ok", "already_used", "not_paid", "not_found"]
     order: Receipt | None
+
+
+# ---- Milestone 4: find it fast ----------------------------------------------------------------
+
+
+class RouteListRequest(Wire):
+    lines: list[str] = Field(min_length=1, max_length=60)
+
+
+HelpTopic = Literal["find_item", "price", "stock", "other"]
+
+
+class HelpCreateRequest(Wire):
+    topic: HelpTopic = "find_item"
+    note: str | None = Field(default=None, max_length=200)
+
+
+class HelpActionRequest(Wire):
+    action: Literal["acknowledge", "resolve", "cancel"]
+
+
+class ChatTurn(Wire):
+    role: Literal["user", "assistant"]
+    content: str = Field(max_length=2000)
+
+
+class AskRequest(Wire):
+    message: str = Field(min_length=1, max_length=500)
+    history: list[ChatTurn] = Field(default_factory=list, max_length=12)

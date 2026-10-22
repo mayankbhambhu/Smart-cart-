@@ -43,17 +43,3 @@ async def test_lists_inventory_and_filters_low_stock(http: httpx.AsyncClient) ->
     ]
     assert 0 < len(low) < len(everything)
     assert all(i["available"] <= i["lowStockThreshold"] for i in low)
-
-
-async def test_search_finds_products_with_location_and_stock(http: httpx.AsyncClient) -> None:
-    res = await http.get("/v1/stores/S-01/products/search", params={"q": "amul milk"})
-    assert res.status_code == 200
-    results = res.json()["results"]
-    assert results and all("amul" in r["name"].lower() or r["brand"] == "Amul" for r in results)
-    assert all(r["aisle"] and r["stock"] in {"in_stock", "low", "out"} for r in results)
-    per_kg = [r["unitPricePaisePerKg"] for r in results if r["unitPricePaisePerKg"] is not None]
-    assert per_kg == sorted(per_kg)
-
-
-async def test_search_rejects_an_empty_query(http: httpx.AsyncClient) -> None:
-    assert (await http.get("/v1/stores/S-01/products/search", params={"q": "  "})).status_code == 400

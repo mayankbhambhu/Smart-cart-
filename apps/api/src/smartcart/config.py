@@ -30,6 +30,9 @@ class Settings(BaseSettings):
     stripe_secret_key: str | None = None
     stripe_publishable_key: str | None = None
     stripe_webhook_secret: str | None = None
+    # Ask SmartCart uses Claude when this is set; without it the assistant answers by rules from the
+    # same store facts. From the environment (Secrets Manager in AWS), never from code or chat.
+    anthropic_api_key: str | None = None
     # Use the Socket.IO Redis manager so any API instance can deliver to any room.
     realtime_redis: bool = True
 
