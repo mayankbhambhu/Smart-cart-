@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "cartCode": {
+      "type": "string",
+      "pattern": "^C-\\d{4,}$"
+    },
+    "storeId": {
+      "type": "string",
+      "pattern": "^S-\\d{2,}$"
+    }
+  },
+  "required": [
+    "cartCode",
+    "storeId"
+  ]
+}

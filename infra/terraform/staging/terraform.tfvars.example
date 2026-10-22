@@ -1,0 +1,2 @@
+# Copy to terraform.tfvars to override defaults. Never put secrets here.
+api_desired_count = 1
