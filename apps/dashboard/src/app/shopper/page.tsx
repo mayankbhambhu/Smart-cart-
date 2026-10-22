@@ -6,10 +6,12 @@ import { DEMO } from "@/lib/api";
 const APP_URL = process.env.NEXT_PUBLIC_SHOPPER_APP_URL || "../app/";
 
 const steps = [
-  "Sign in with any name, then tap Start shopping and pick a cart.",
+  "Choose Shopper and sign in with Google (any name works in the demo), then tap Start shopping and pick a cart.",
   "Scan a few items from the demo shelf. The cart appears under Active carts here, and stock moves in Inventory.",
-  "Try Find, Smart list and Ask: they answer from this store's catalogue and stock.",
-  "Tap Call for help. The request shows up under Help here; press “I'm on my way” and the phone updates.",
+  "Open Sections to browse Dairy and eggs, Fruits, Snacks and the rest, each item with its veg or non-veg mark. Set a diet in the filter and browse, search and offers follow it.",
+  "Reserve items for a pickup slot. The reservation appears under Reservations here and stock is held for it.",
+  "Tap Call for help. The request shows up under Help here; press “I'm on my way” and the phone shows who is coming.",
+  "Sign out and choose Store team as Rajesh (S01-0002 / floor-demo-1): the handheld's staff mode with help, the pick list, tasks, stock checks and the exit check. Pick the reservation into a cart and the board here updates.",
   "Check out and pay. The order and its exit code appear under Orders, ready for the door check.",
 ];
 
@@ -40,7 +42,7 @@ export default function ShopperPage() {
           <h1 className="text-xl font-semibold">Shopper app</h1>
           <p className="text-sm text-slate-500">
             The app a shopper uses in the store, running on a simulated store in your browser. What they do here shows up live
-            on the dashboard tabs above.
+            on the dashboard tabs above. Accounts approved under Account approvals can sign in on the app's Store team tab too.
           </p>
         </div>
         <ol className="space-y-2 text-sm text-slate-700">

@@ -1,8 +1,14 @@
 # Smart Cart
 
 Checkout-free shopping for a DMart pilot: shoppers pair a cart with their phone, scan items as they
-shop, see a live GST-inclusive total, pay in the app and walk out. Store staff watch inventory,
-carts and orders on a web dashboard.
+shop, see a live GST-inclusive total, pay in the app and walk out, or reserve items for pickup.
+The same app has a staff mode for the store team on the floor (help requests, picking
+reservations, tasks, stock counts, the exit check), and store managers run the store from a web
+dashboard.
+
+Two sides sign in differently. Shoppers use Google, Apple (on iPhone) or their phone number.
+The store team signs in with a staff ID or registered phone and a password; those accounts exist
+only after a store manager requests one and the SmartCart admin team approves it.
 
 Architecture: [docs/architecture.md](docs/architecture.md).
 
@@ -52,9 +58,20 @@ through anywhere:
 - `pnpm --filter @smart-cart/mobile build:web-demo` builds the shopper app for the web
   (`EXPO_PUBLIC_DEMO=1`): tap a cart and products instead of scanning, and pay with the test payment.
 
-Opened in the same browser, the two talk to each other: the shopper's cart, payment and help
-requests show up on the dashboard, and staff answering a help request update the phone. The
-dashboard's **Shopper app** page shows the app in a phone frame beside it.
+Opened in the same browser, the two talk to each other: the shopper's cart, payment, help requests
+and reservations show up on the dashboard, staff answering a help request update the phone, and
+an account approved on the dashboard can sign in on the app's Store team tab. The dashboard's
+**Shopper app** page shows the app in a phone frame beside it.
+
+Demo accounts (both demos show them on the sign-in screen):
+
+| Who | Staff ID | Password | Where |
+| --- | --- | --- | --- |
+| Floor staff, Rajesh Kumar | `S01-0002` | `floor-demo-1` | the app's Store team tab |
+| Store manager, Anita Desai | `S01-0001` | `manager-demo-1` | dashboard (and the app) |
+| SmartCart admin team | `ADM-0001` | `admin-demo-1` | dashboard: Account approvals |
+
+Shoppers sign in with any name; the demo's phone OTP code is `123456`.
 
 The `Demos on GitHub Pages` workflow publishes both on every push to main: the dashboard at
 https://mayankbhambhu.github.io/Smart-cart-/ and the app at
@@ -63,11 +80,21 @@ screen). Pages must be set to **Settings → Pages → Source: GitHub Actions**.
 
 ## Sign-in during development
 
-Until the Firebase project exists, run the API with `AUTH_MODE=dev` (the default outside
+Shoppers: until the Firebase project exists, run the API with `AUTH_MODE=dev` (the default outside
 production). It then accepts bearer tokens of the form `dev:<uid>` or `dev:<uid>:<display name>`
-without checking them, and refuses to start that way when `ENV=production`. The seed creates a
-demo store manager, `dev:staff-demo`, which the dashboard uses. With `AUTH_MODE=firebase` and
-`FIREBASE_PROJECT_ID` set, the API verifies real Firebase ID tokens against Google's public keys.
+without checking them, and refuses to start that way when `ENV=production`. With
+`AUTH_MODE=firebase` and `FIREBASE_PROJECT_ID` set, the API verifies real Firebase ID tokens
+against Google's public keys.
+
+Store team: `POST /v1/auth/staff/login` takes a staff ID or registered phone and a password and
+returns a 12-hour session token signed with `SESSION_SECRET`. Five wrong passwords lock the account
+for 15 minutes, and a temporary password must be changed at first sign-in. `GET /v1/me` tells
+either app which side to show, from the account's role on the server. The seed creates a store
+manager (`dev:staff-demo`, staff ID `S01-0001`) and the SmartCart admin team (`dev:admin-demo`,
+`ADM-0001`) for dev tokens; `NEXT_PUBLIC_DEV_AUTH_TOKEN` signs the dashboard in as one of them. To
+try a real password sign-in, request an account on **Staff accounts** as the manager, approve it on
+**Account approvals** as `dev:admin-demo`, and sign in with the staff ID and the temporary password
+the approval shows (`SMS_PROVIDER=log` returns the SMS text instead of sending it).
 
 ## Try the cart from a terminal
 
@@ -117,9 +144,17 @@ pnpm --filter @smart-cart/mobile export:check   # Android and iOS bundles
 
 ## Demo data
 
-`apps/api/src/smartcart/data/products.csv` holds 213 everyday products across 11 categories for one demo
-store (`S-01`) with 20 carts (`C-0001` to `C-0020`). Fourteen start below their low-stock threshold
-so the dashboard has alerts to show.
+`apps/api/src/smartcart/data/products.csv` holds 234 everyday products for one demo store (`S-01`)
+with 20 carts (`C-0001` to `C-0020`). Fourteen start below their low-stock threshold so the
+dashboard has alerts to show. Floor staff park a picked reservation in any free cart; the web
+demos use `C-0016`, `C-0017`, `C-0018` and `C-0020` for that.
+
+Products sit in 13 sections (Fruits, Vegetables, Dairy and eggs, Meat and fish, Staples, Spices and
+masala, Bakery, Snacks and packaged food, Beverages, Frozen, Personal care, Household and cleaning,
+Baby care), listed with their categories in `data/sections.json`. Each product carries the pack's
+food label (`veg`, `non_veg`, `egg` or `not_food`) and any diet claims printed on it (`jain`,
+`vegan`, `gluten_free`, `sugar_free`, `no_added_sugar`). A product without a label shows "not
+labelled": labels are never guessed. Managers correct them on the dashboard's Inventory page.
 
 The barcodes are **synthetic**: they use the GS1 in-store prefix `20`, so they can never clash with
 a real product, but scanning a real pack will not find it. Print the codes, or replace the
@@ -137,6 +172,11 @@ be checked before the pilot.
 4. **Find it fast**: product search with aisle, shelf, stock and unit price; a smart list that
    becomes a walking route; Ask SmartCart; call for help with staff alerts; a budget tracker; and
    store insights (missed searches, help by aisle). Plus the shopper app's web demo.
-5. Pilot hardening: reconnects, idempotency, rate limits, Sentry, a 20-shopper usability test.
+5. **Two sides**: Shopper or Store team sign-in; store-team accounts requested by a manager and
+   approved by the SmartCart admin team (switching one off too); reservations for a pickup slot;
+   the app's staff mode (help inbox, pick list, tasks, stock check and correction, exit check);
+   product sections with veg and non-veg labels and a diet preference; and the dashboard's
+   Reservations, Staff and tasks, Reports, Staff accounts and Account approvals pages.
+6. Pilot hardening: reconnects, idempotency, rate limits, Sentry, a 20-shopper usability test.
 
 Deploying staging: [docs/deploy-staging.md](docs/deploy-staging.md).

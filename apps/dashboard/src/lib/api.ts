@@ -1,10 +1,12 @@
+import type { FoodType, StaffRole } from "@smart-cart/contracts";
+
 export const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
 export const STORE_ID = process.env.NEXT_PUBLIC_STORE_ID ?? "S-01";
 /**
- * Until staff sign in with Firebase, the dashboard uses the API's dev mode as the seeded
- * demo manager. Only works against an API running with AUTH_MODE=dev.
+ * Local development shortcut: with an API in AUTH_MODE=dev, NEXT_PUBLIC_DEV_AUTH_TOKEN=dev:staff-demo
+ * (the seeded manager) or dev:admin-demo (the admin team) skips the sign-in page. Unset in real builds.
  */
-export const AUTH_TOKEN = process.env.NEXT_PUBLIC_DEV_AUTH_TOKEN ?? "dev:staff-demo";
+export const DEV_AUTH_TOKEN = process.env.NEXT_PUBLIC_DEV_AUTH_TOKEN || null;
 
 /**
  * Demo mode (NEXT_PUBLIC_DEMO=1): no API at all. Data and live events come from simulated
@@ -12,32 +14,98 @@ export const AUTH_TOKEN = process.env.NEXT_PUBLIC_DEV_AUTH_TOKEN ?? "dev:staff-d
  */
 export const DEMO = process.env.NEXT_PUBLIC_DEMO === "1";
 
-export async function apiGet<T>(path: string): Promise<T> {
-  if (DEMO) {
-    const { demoStore } = await import("./demo/store");
-    return demoStore().get(path) as Promise<T>;
+/** An error from the API with its machine-readable code ("forbidden", "reason_required", ...). */
+export class ApiError extends Error {
+  constructor(
+    readonly status: number,
+    readonly code: string,
+    readonly details: Record<string, unknown> = {},
+  ) {
+    super(`${code} (${status})`);
   }
-  const res = await fetch(`${API_URL}${path}`, {
-    cache: "no-store",
-    headers: { authorization: `Bearer ${AUTH_TOKEN}` },
-  });
-  if (!res.ok) throw new Error(`GET ${path} failed: ${res.status}`);
-  return res.json() as Promise<T>;
 }
 
-export async function apiPost<T>(path: string, body: unknown): Promise<T> {
-  if (DEMO) {
-    const { demoStore } = await import("./demo/store");
-    return demoStore().post(path, body) as Promise<T>;
+/** The signed-in store-team member, kept in this browser for the 12 hours the token lasts. */
+export type StaffSession = {
+  token: string;
+  expiresAt: string;
+  name: string;
+  staffCode: string;
+  role: StaffRole;
+  storeId: string;
+  mustChangePassword: boolean;
+};
+
+const SESSION_KEY = "smartcart.staffSession";
+let token: string | null = DEV_AUTH_TOKEN;
+let onSignedOut: () => void = () => {};
+
+export const sessionStore = {
+  load(): StaffSession | null {
+    try {
+      const s = JSON.parse(localStorage.getItem(SESSION_KEY) ?? "null") as StaffSession | null;
+      return s && Date.parse(s.expiresAt) > Date.now() ? s : null;
+    } catch {
+      return null;
+    }
+  },
+  save(s: StaffSession | null) {
+    try {
+      if (s) localStorage.setItem(SESSION_KEY, JSON.stringify(s));
+      else localStorage.removeItem(SESSION_KEY);
+    } catch {
+      // Private windows can block storage: the session then lasts until the tab closes.
+    }
+  },
+};
+
+export const setToken = (t: string | null) => {
+  token = t ?? DEV_AUTH_TOKEN;
+};
+export const getToken = () => token;
+/** Called when the API says the session is no longer valid (expired, suspended account). */
+export const onSessionLost = (fn: () => void) => {
+  onSignedOut = fn;
+};
+
+export async function apiRequest<T>(method: string, path: string, body?: unknown): Promise<T> {
+  try {
+    if (DEMO) {
+      const { demoStore } = await import("./demo/store");
+      return (await demoStore().request(method, path, body, token)) as T;
+    }
+    let res: Response;
+    try {
+      res = await fetch(`${API_URL}${path}`, {
+        method,
+        cache: "no-store",
+        headers: {
+          ...(token ? { authorization: `Bearer ${token}` } : {}),
+          ...(body !== undefined ? { "content-type": "application/json" } : {}),
+        },
+        body: body !== undefined ? JSON.stringify(body) : undefined,
+      });
+    } catch {
+      throw new ApiError(0, "network");
+    }
+    const data = (await res.json().catch(() => ({}))) as { error?: string };
+    if (!res.ok) {
+      const { error, ...details } = data;
+      throw new ApiError(res.status, error ?? "unknown", details);
+    }
+    return data as T;
+  } catch (e) {
+    const err = e as { status?: number; code?: string; extra?: Record<string, unknown> };
+    const apiError = e instanceof ApiError ? e : err.code ? new ApiError(err.status ?? 500, err.code, err.extra ?? {}) : null;
+    if (apiError?.status === 401 && path !== "/v1/auth/staff/login") onSignedOut();
+    throw apiError ?? e;
   }
-  const res = await fetch(`${API_URL}${path}`, {
-    method: "POST",
-    headers: { authorization: `Bearer ${AUTH_TOKEN}`, "content-type": "application/json" },
-    body: JSON.stringify(body),
-  });
-  if (!res.ok) throw new Error(`POST ${path} failed: ${res.status}`);
-  return res.json() as Promise<T>;
 }
+
+export const apiGet = <T>(path: string) => apiRequest<T>("GET", path);
+export const apiPost = <T>(path: string, body: unknown) => apiRequest<T>("POST", path, body);
+export const apiPut = <T>(path: string, body: unknown) => apiRequest<T>("PUT", path, body);
+export const apiPatch = <T>(path: string, body: unknown) => apiRequest<T>("PATCH", path, body);
 
 export const formatInr = (paise: number | null) =>
   paise === null
@@ -49,6 +117,12 @@ export type InventoryItem = {
   name: string;
   brand: string | null;
   category: string;
+  categoryId: string | null;
+  /** The shelf section, such as "Dairy and eggs". */
+  section: string | null;
+  /** The pack's food label. null means nobody has labelled it yet: never guess one. */
+  foodType: FoodType | null;
+  dietTags: string[];
   barcode: string | null;
   pricePaise: number | null;
   onHand: number;

@@ -7,7 +7,7 @@ from sqlalchemy.orm import selectinload
 from ..auth import Db, Manager
 from ..cart_service import CartService
 from ..checkout_service import CheckoutService
-from ..models import Inventory, Product
+from ..models import Category, Inventory, Product, Section
 from ..pricing import current_prices
 from ..schemas import ExitCheckRequest
 
@@ -34,6 +34,8 @@ async def inventory(
         stmt = stmt.where(Product.name.ilike(f"%{q.strip()}%"))
     rows = list(await db.scalars(stmt))
     prices = await current_prices(db, store_id, [r.product_id for r in rows])
+    sections = await db.execute(select(Category.id, Section.name).join(Section))
+    section_of: dict[str, str] = {category: section for category, section in sections}
 
     items = []
     for r in rows:
@@ -48,6 +50,10 @@ async def inventory(
                 "name": r.product.name,
                 "brand": r.product.brand,
                 "category": r.product.category,
+                "categoryId": r.product.category_id,
+                "section": section_of.get(r.product.category_id) if r.product.category_id else None,
+                "foodType": r.product.food_type.value if r.product.food_type else None,
+                "dietTags": list(r.product.diet_tags),
                 "barcode": r.product.barcodes[0].code if r.product.barcodes else None,
                 "pricePaise": price.price_paise if price else None,
                 "onHand": r.on_hand,

@@ -5,6 +5,8 @@
  *
  * When the shopper app demo is open in the same browser, its cart, payment and help requests join
  * the simulated ones over a BroadcastChannel, and staff answering a help request here updates the app.
+ * Store-team sign-in, staff accounts, reservations and tasks come from the shared StoreTeam; accounts
+ * approved here can sign in on the app's staff mode, and the app's reservations show on the board.
  */
 import type {
   AskResponse,
@@ -18,16 +20,22 @@ import type {
 } from "@smart-cart/contracts";
 import type { ActiveCart, InventoryItem, OrderRow, Totals } from "../api";
 import {
+  browseResponse,
   catalog,
   DEMO_APP_CARTS,
   DEMO_CHANNEL,
+  DemoApiError,
   exitCode,
   gstIncluded,
   retrieve,
   routeList,
   rulesAnswer,
   search,
+  sectionsResponse,
+  StoreTeam,
+  PICKUP_CARTS,
   type BridgeMessage,
+  type Caller,
   type DemoProduct,
 } from "@smart-cart/demo";
 
@@ -83,7 +91,28 @@ class DemoStore {
   private pausedListeners = new Set<(paused: boolean) => void>();
   private channel: BroadcastChannel | null = null;
   private appHelp = new Set<string>();
+  /** Food labels a manager corrected on the Inventory page. */
+  private labels = new Map<string, Product["foodType"]>();
   paused = false;
+  readonly team = new StoreTeam({
+    storeId: STORE,
+    available: (id) => this.available(id),
+    onHand: (id) => this.onHand.get(id) ?? 0,
+    reservedQty: (id) => this.reserved.get(id) ?? 0,
+    hold: (id, delta) => {
+      this.reserved.set(id, (this.reserved.get(id) ?? 0) + delta);
+      this.touch(id);
+    },
+    setOnHand: (id, onHand) => {
+      const p = byId.get(id)!;
+      const was = this.available(id);
+      this.onHand.set(id, onHand);
+      this.touch(id);
+      this.stockChanged(p, null, was);
+    },
+    emit: (e) => this.emit(e),
+    cartFree: (code) => ![...this.sessions.values()].some((s) => s.cartCode === code),
+  });
 
   constructor() {
     // Earlier shoppers who already paid (most of them have left through the exit).
@@ -129,18 +158,60 @@ class DemoStore {
     if (typeof BroadcastChannel !== "undefined") {
       this.channel = new BroadcastChannel(DEMO_CHANNEL);
       this.channel.onmessage = (m: MessageEvent<BridgeMessage>) => this.fromApp(m.data);
+      // Accounts approved here can sign in on the app's Store team tab. Sent again with each hello,
+      // so an app tab opened after the approval still gets them.
+      const issued = new Map<string, BridgeMessage>();
+      this.team.onAccountCreated(({ account, password }) => {
+        const msg = { kind: "staff", account, password } satisfies BridgeMessage;
+        issued.set(account.id, msg);
+        this.channel?.postMessage(msg);
+      });
       // Tells the app demo a dashboard is open, so staff here (not a simulated one) answer help.
       const hello = (fresh: boolean) => this.channel?.postMessage({ kind: "hello", fresh } satisfies BridgeMessage);
       hello(true);
-      setInterval(() => hello(false), 5_000);
+      setInterval(() => {
+        hello(false);
+        issued.forEach((m) => this.channel?.postMessage(m));
+      }, 5_000);
     }
   }
 
   // ---- REST stand-in -------------------------------------------------------------------------
 
-  async get(path: string): Promise<unknown> {
+  /** The REST API as the dashboard calls it. `token` is a store-team token from the demo sign-in. */
+  async request(method: string, path: string, body: unknown, token: string | null): Promise<unknown> {
     await new Promise((r) => setTimeout(r, 150)); // feel like a network call
     const url = new URL(path, "http://demo");
+    const caller = this.team.staffFor(token);
+    const forTeam = this.team.handle(method, url, body, caller);
+    if (forTeam !== undefined) return forTeam;
+    if (method === "GET" && url.pathname === "/v1/sections") return sectionsResponse();
+    if (method === "GET" && url.pathname === "/v1/products") return browseResponse(url, (id) => this.available(id));
+    // The store pages need a manager (or the admin team), as on the API. The shopper view is open.
+    if (url.pathname.startsWith("/admin/")) this.manager(caller);
+    const label = method === "PATCH" ? new RegExp(`^/admin/v1/stores/${STORE}/catalog/products/([^/]+)$`).exec(url.pathname) : null;
+    if (label) return this.label(label[1]!, body as { foodType?: Product["foodType"] });
+    if (method === "GET") return this.get(url);
+    if (method === "POST") return this.post(url.pathname, body);
+    throw new DemoApiError(404, "not_found");
+  }
+
+  private label(productId: string, body: { foodType?: Product["foodType"] }) {
+    const p = byId.get(productId);
+    if (!p) throw new DemoApiError(404, "product_not_found");
+    if (body.foodType !== undefined) this.labels.set(productId, body.foodType);
+    const item = this.item(p);
+    return { productId, name: p.name, category: p.category, categoryId: p.categoryId, foodType: item.foodType, dietTags: item.dietTags };
+  }
+
+  private manager(caller: Caller | null) {
+    if (!caller) throw new DemoApiError(401, "unauthenticated");
+    if (caller.kind !== "staff" || caller.account.role === "floor_staff") throw new DemoApiError(403, "forbidden");
+    if (caller.account.mustChangePassword) throw new DemoApiError(403, "password_change_required");
+  }
+
+  private get(url: URL): unknown {
+    const path = url.pathname;
     if (url.pathname === `/admin/v1/stores/${STORE}/inventory`) {
       const q = (url.searchParams.get("q") ?? "").toLowerCase();
       const lowOnly = url.searchParams.get("lowStockOnly") === "true";
@@ -188,11 +259,10 @@ class DemoStore {
       return { storeId: STORE, requests };
     }
     if (url.pathname === `/admin/v1/stores/${STORE}/insights`) return this.insights(Number(url.searchParams.get("days") ?? 7));
-    throw new Error(`GET ${path} is not available in demo mode`);
+    throw new DemoApiError(404, "not_available_in_demo", { path });
   }
 
-  async post(path: string, body: unknown): Promise<unknown> {
-    await new Promise((r) => setTimeout(r, 150));
+  private post(path: string, body: unknown): unknown {
     if (path === `/admin/v1/stores/${STORE}/exit-checks`) {
       const raw = String((body as { code?: string }).code ?? "");
       const code = (raw.includes("code=") ? raw.split("code=")[1]! : raw).trim().toUpperCase();
@@ -227,7 +297,7 @@ class DemoStore {
     const helpAction = new RegExp(`^(/admin)?/v1/stores/${STORE}/help/([^/]+)$`).exec(path);
     if (helpAction) {
       const h = this.help.find((x) => x.id === helpAction[2]);
-      if (!h) throw new Error("help_request_not_found");
+      if (!h) throw new DemoApiError(404, "help_request_not_found");
       const action = (body as { action: string }).action;
       const now = new Date().toISOString();
       if (action === "acknowledge") Object.assign(h, { status: "acknowledged", acknowledgedAt: now });
@@ -238,7 +308,7 @@ class DemoStore {
       if (this.appHelp.has(h.id)) this.channel?.postMessage({ kind: "event", event } satisfies BridgeMessage);
       return { ...h };
     }
-    throw new Error(`POST ${path} is not available in demo mode`);
+    throw new DemoApiError(404, "not_available_in_demo", { path });
   }
 
   // ---- live events ---------------------------------------------------------------------------
@@ -310,7 +380,8 @@ class DemoStore {
   }
 
   private pair(startedAt: number, emit: boolean): Session | null {
-    const used = new Set([...this.sessions.values()].map((s) => s.cartCode).concat(DEMO_APP_CARTS));
+    // App-demo carts and carts parked at the pickup point are never taken by simulated shoppers.
+    const used = new Set([...this.sessions.values()].map((s) => s.cartCode).concat(DEMO_APP_CARTS, PICKUP_CARTS));
     const free = Array.from({ length: 20 }, (_, i) => `C-${String(i + 1).padStart(4, "0")}`).filter((c) => !used.has(c));
     const names = new Set([...this.sessions.values()].map((s) => s.shopperName));
     const shoppers = SHOPPERS.filter((n) => !names.has(n));
@@ -518,6 +589,7 @@ class DemoStore {
   // ---- the shopper app demo, in another tab ---------------------------------------------------
 
   private fromApp(msg: BridgeMessage) {
+    if (msg.kind === "staff") return this.team.adopt(msg.account, msg.password);
     if (msg.kind === "sync") {
       for (const app of msg.sessions) {
         if (this.sessions.has(app.sessionId)) continue;
@@ -544,6 +616,7 @@ class DemoStore {
     }
     if (msg.kind !== "event") return;
     const e = msg.event;
+    if (e.type === "reservation.created" || e.type === "reservation.updated") return this.team.mirror(e.data);
     if (e.type === "cart.session_started") {
       this.sessions.set(e.data.sessionId, {
         sessionId: e.data.sessionId,
@@ -601,7 +674,7 @@ class DemoStore {
     this.emit(e);
   }
 
-  private stockChanged(p: Product, cartCode: string, wasAvailable: number) {
+  private stockChanged(p: Product, cartCode: string | null, wasAvailable: number) {
     const onHand = this.onHand.get(p.productId)!;
     const reserved = this.reserved.get(p.productId)!;
     this.emit({
@@ -633,6 +706,10 @@ class DemoStore {
       name: p.name,
       brand: p.brand,
       category: p.category,
+      categoryId: p.categoryId,
+      section: p.section,
+      foodType: this.labels.has(p.productId) ? this.labels.get(p.productId)! : p.foodType,
+      dietTags: [...p.dietTags],
       barcode: p.barcode,
       pricePaise: p.pricePaise,
       onHand: this.onHand.get(p.productId)!,

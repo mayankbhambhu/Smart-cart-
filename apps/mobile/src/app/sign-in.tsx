@@ -20,6 +20,10 @@ type Side = "shopper" | "store";
 
 /** The first screen: shoppers and the store team sign in differently, and the server decides the side. */
 export default function SignInScreen() {
+  // Demo build: start the simulated store now, so it hears accounts approved on the dashboard demo.
+  useEffect(() => {
+    if (DEMO) void import("../lib/demo").then(({ demo }) => demo());
+  }, []);
   const [side, setSide] = useState<Side>("shopper");
   return (
     <SafeAreaView style={styles.safe}>

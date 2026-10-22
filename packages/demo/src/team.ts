@@ -188,7 +188,15 @@ export class StoreTeam {
 
   /** An account approved in the other demo tab. */
   adopt(account: StaffAccount, password: string) {
-    if (this.accounts.some((a) => a.id === account.id || a.phone === account.phone)) return;
+    const local = this.accounts.find((a) => a.id === account.id || a.phone === account.phone);
+    if (local) {
+      // A resend in the other tab: its temporary password wins until they set their own here.
+      if (local.mustChangePassword && account.mustChangePassword && local.password !== password) {
+        local.password = password;
+        local.tempExpiresAt = Date.now() + TEMP_PASSWORD_HOURS * 3_600_000;
+      }
+      return;
+    }
     this.accounts.push({
       ...account,
       userId: `staff:${account.staffCode}`,
@@ -560,9 +568,9 @@ export class StoreTeam {
     return this.announce("reservation.created", r);
   }
 
-  private newReservation(shopper: { id: string; name: string }, items: [string, number][], start: string, end: string, at: number): Hold {
+  private newReservation(shopper: { id: string; name: string }, items: [string, number][], start: string, end: string, at: number, id: string = uuid()): Hold {
     const r: Hold = {
-      id: uuid(),
+      id,
       storeId: this.host.storeId,
       status: "reserved",
       slotStart: start,
@@ -615,6 +623,31 @@ export class StoreTeam {
       this.markPicked(r, cart, DEMO_LOGINS[0].name, "staff:S01-0002");
       this.announce("reservation.updated", r);
     }, afterMs);
+  }
+
+  /**
+   * A reservation made or changed in the other demo tab (the shopper app), so the dashboard's board,
+   * stock holds and pick tasks follow it. Emits the event locally; the other tab already broadcast it.
+   */
+  mirror(incoming: Reservation) {
+    let r = this.reservations.find((x) => x.id === incoming.id);
+    if (!r) {
+      if (!ACTIVE.includes(incoming.status)) return;
+      const shopper = { id: `app:${incoming.id}`, name: incoming.shopperName ?? "App shopper" };
+      const items = incoming.items.filter((i) => byId.has(i.productId)).map((i): [string, number] => [i.productId, i.qty]);
+      r = this.newReservation(shopper, items, incoming.slotStart, incoming.slotEnd, Date.parse(incoming.createdAt ?? "") || Date.now(), incoming.id);
+      if (incoming.status === "reserved") return void this.announce("reservation.created", r);
+    }
+    if (incoming.status === r.status) return;
+    if (incoming.status === "picked") {
+      this.markPicked(r, incoming.cartCode ?? "", incoming.pickedBy ?? "Floor staff", "");
+    } else if (incoming.status === "cancelled" || incoming.status === "expired") {
+      this.close(r, incoming.status);
+    } else if (incoming.status === "collected") {
+      for (const i of r.items) this.host.hold(i.productId, -i.qty);
+      Object.assign(r, { status: "collected", closedAt: incoming.closedAt ?? iso(Date.now()) });
+    }
+    this.announce("reservation.updated", r);
   }
 
   private close(r: Hold, status: "cancelled" | "expired") {

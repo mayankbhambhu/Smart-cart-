@@ -43,3 +43,12 @@ async def test_lists_inventory_and_filters_low_stock(http: httpx.AsyncClient) ->
     ]
     assert 0 < len(low) < len(everything)
     assert all(i["available"] <= i["lowStockThreshold"] for i in low)
+
+
+async def test_inventory_rows_carry_section_and_food_label(http: httpx.AsyncClient) -> None:
+    res = await http.get("/admin/v1/stores/S-01/inventory", headers={"authorization": STAFF})
+    milk = next(i for i in res.json()["items"] if i["name"] == "Amul Toned Milk 500 ml")
+    assert milk["section"] == "Dairy and eggs"
+    assert milk["categoryId"] == "dairy-eggs/milk"
+    assert milk["foodType"] == "veg"
+    assert isinstance(milk["dietTags"], list)
