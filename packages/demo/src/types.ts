@@ -5,6 +5,9 @@ export type DemoProduct = {
   name: string;
   brand: string | null;
   category: string;
+  categoryId: string;
+  section: string;
+  foodType: "veg" | "non_veg" | "egg" | "not_food" | null;
   gstRateBp: number;
   pricePaise: number;
   mrpPaise: number;

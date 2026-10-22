@@ -1,7 +1,9 @@
+import type { ReactNode } from "react";
 import type { SearchResult } from "@smart-cart/contracts";
 import { StyleSheet, Text, View } from "react-native";
 import { stockLabel, unitPriceLabel, whereLabel } from "../lib/assist-logic";
 import { formatInr } from "../lib/money";
+import { FoodMark } from "./FoodMark";
 import { colors } from "../lib/theme";
 
 const stockColors = {
@@ -11,10 +13,16 @@ const stockColors = {
   unknown: { bg: "#F1F5F9", fg: colors.muted },
 };
 
-const dietNames: Record<string, string> = { veg: "Veg", jain: "Jain", no_added_sugar: "No added sugar" };
+const dietNames: Record<string, string> = {
+  jain: "Jain",
+  vegan: "Vegan",
+  gluten_free: "Gluten free",
+  sugar_free: "Sugar free",
+  no_added_sugar: "No added sugar",
+};
 
 /** One product with where it is, its price, price per kg/L and stock, all from store data. */
-export function ProductResult({ product, badge }: { product: SearchResult; badge?: string }) {
+export function ProductResult({ product, badge, children }: { product: SearchResult; badge?: string; children?: ReactNode }) {
   const unit = unitPriceLabel(product);
   const stock = stockColors[product.stock];
   return (
@@ -32,6 +40,7 @@ export function ProductResult({ product, badge }: { product: SearchResult; badge
         </View>
       </View>
       <View style={styles.tags}>
+        <FoodMark type={product.foodType} />
         <Text style={[styles.pill, { backgroundColor: stock.bg, color: stock.fg }]}>{stockLabel[product.stock]}</Text>
         {product.dietTags.map((t) => (
           <Text key={t} style={[styles.pill, styles.diet]}>
@@ -39,6 +48,7 @@ export function ProductResult({ product, badge }: { product: SearchResult; badge
           </Text>
         ))}
       </View>
+      {children}
     </View>
   );
 }
@@ -53,7 +63,7 @@ const styles = StyleSheet.create({
   price: { fontSize: 16, fontWeight: "700", color: colors.text },
   mrp: { fontSize: 12, color: colors.muted, textDecorationLine: "line-through" },
   unit: { fontSize: 12, color: colors.muted, marginTop: 2 },
-  tags: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
+  tags: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 6 },
   pill: { fontSize: 12, fontWeight: "600", paddingHorizontal: 8, paddingVertical: 3, borderRadius: 999, overflow: "hidden" },
   diet: { backgroundColor: "#F1F5F9", color: colors.text },
 });

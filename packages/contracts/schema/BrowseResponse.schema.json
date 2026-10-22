@@ -1,0 +1,159 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "storeId": {
+      "type": "string"
+    },
+    "section": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "category": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "results": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "productId": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "brand": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "category": {
+            "type": "string"
+          },
+          "categoryId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "section": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "foodType": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "veg",
+                  "non_veg",
+                  "egg",
+                  "not_food"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "pricePaise": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "mrpPaise": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "unitPricePaise": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "unit": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "kg",
+                  "L",
+                  "pc"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "dietTags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "aisle": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "shelf": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "stock": {
+            "type": "string",
+            "enum": [
+              "in_stock",
+              "low",
+              "out",
+              "unknown"
+            ]
+          }
+        },
+        "required": [
+          "productId",
+          "name",
+          "brand",
+          "category",
+          "categoryId",
+          "section",
+          "foodType",
+          "pricePaise",
+          "mrpPaise",
+          "unitPricePaise",
+          "unit",
+          "dietTags",
+          "aisle",
+          "shelf",
+          "stock"
+        ]
+      }
+    }
+  },
+  "required": [
+    "storeId",
+    "section",
+    "category",
+    "results"
+  ]
+}

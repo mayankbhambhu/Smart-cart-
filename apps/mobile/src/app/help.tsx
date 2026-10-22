@@ -44,7 +44,9 @@ export default function HelpScreen() {
     return (
       <View style={styles.body}>
         <View style={styles.statusCard}>
-          <Text style={styles.big}>{help.status === "open" ? "Help requested" : "A staff member is on the way"}</Text>
+          <Text style={styles.big}>
+            {help.status === "open" ? "Help requested" : `${help.staffName ?? "A staff member"} is on the way`}
+          </Text>
           <Text style={styles.muted}>
             {help.aisle ? `We told them you're near aisle ${help.aisle}. ` : "Stay where you are. "}
             {help.status === "open" ? "The next free floor assistant will come to you." : "They've seen your request."}

@@ -209,3 +209,71 @@ def _assist_service(_: httpx.AsyncClient):  # type: ignore[no-untyped-def]
         return None
 
     return AssistService(publish)
+
+
+# ---- Product sections and food labels ------------------------------------------------------------
+
+
+@integration
+async def test_sections_list_categories_with_counts(http: httpx.AsyncClient) -> None:
+    body = (await http.get("/v1/sections", params={"storeId": STORE})).json()
+    names = [s["name"] for s in body["sections"]]
+    assert names[:4] == ["Fruits", "Vegetables", "Dairy and eggs", "Meat and fish"]
+    dairy = next(s for s in body["sections"] if s["id"] == "dairy-eggs")
+    assert [c["name"] for c in dairy["categories"]] == [
+        "Milk",
+        "Curd and dahi",
+        "Butter and cheese",
+        "Paneer",
+        "Eggs",
+    ]
+    assert dairy["productCount"] == sum(c["productCount"] for c in dairy["categories"]) > 0
+
+
+@integration
+async def test_browse_a_section_filtered_by_food_label(http: httpx.AsyncClient) -> None:
+    dairy = (await http.get("/v1/products", params={"storeId": STORE, "section": "dairy-eggs"})).json()[
+        "results"
+    ]
+    assert dairy[0]["category"] == "Milk" and dairy[-1]["category"] == "Eggs"
+    assert {r["section"] for r in dairy} == {"Dairy and eggs"}
+    assert dairy[-1]["foodType"] == "egg"
+    veg = (
+        await http.get("/v1/products", params={"storeId": STORE, "section": "dairy-eggs", "food_type": "veg"})
+    ).json()["results"]
+    assert veg and all(r["foodType"] == "veg" for r in veg)
+    jain = (
+        await http.get("/v1/products", params={"storeId": STORE, "section": "staples", "tags": "jain"})
+    ).json()["results"]
+    assert jain and all("jain" in r["dietTags"] for r in jain)
+    meat = (await http.get("/v1/products", params={"storeId": STORE, "category": "meat-fish/chicken"})).json()
+    assert meat["results"] and all(r["foodType"] == "non_veg" for r in meat["results"])
+    assert (await http.get("/v1/products", params={"storeId": STORE})).status_code == 400
+
+
+@integration
+async def test_managers_correct_a_food_label(http: httpx.AsyncClient, server: Server) -> None:
+    from sqlalchemy import select
+
+    from smartcart.models import AuditLog, Product
+
+    async with server.maker() as db:
+        product = await db.scalar(select(Product).where(Product.name == "Fresh Papaya 1 pc"))
+        assert product
+        pid = product.id
+    path = f"/admin{BASE}/catalog/products/{pid}"
+    assert (await http.patch(path, json={"foodType": None})).status_code == 401
+    assert (
+        await http.patch(path, headers={"authorization": shopper()}, json={"foodType": None})
+    ).status_code == 403
+    res = await http.patch(
+        path, headers={"authorization": STAFF}, json={"foodType": None, "dietTags": ["vegan", "made_up"]}
+    )
+    assert res.json() == res.json() | {"foodType": None, "dietTags": ["vegan"], "category": "Fresh fruits"}
+    res = await http.patch(path, headers={"authorization": STAFF}, json={"foodType": "veg", "dietTags": []})
+    assert res.json()["foodType"] == "veg"
+    async with server.maker() as db:
+        logged = await db.scalar(
+            select(AuditLog).where(AuditLog.target == pid, AuditLog.action == "product.labelled")
+        )
+        assert logged is not None

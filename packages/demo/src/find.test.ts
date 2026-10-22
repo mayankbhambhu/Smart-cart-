@@ -40,3 +40,19 @@ describe("demo find-it-fast matches the API's rules", () => {
     expect(rulesAnswer([])).toContain("won't guess");
   });
 });
+
+describe("browse by section", () => {
+  it("lists a section in shelf order and filters by food label", async () => {
+    const { browse } = await import("./find.js");
+    const { catalog } = await import("./catalog.js");
+    const { sections } = await import("./sections.js");
+    const dairy = browse(catalog, () => 50, { section: "dairy-eggs" }, sections);
+    expect(dairy[0]!.category).toBe("Milk");
+    expect(dairy.at(-1)!.foodType).toBe("egg");
+    const vegOnly = browse(catalog, () => 50, { section: "dairy-eggs", tags: ["veg"] }, sections);
+    expect(vegOnly.some((p) => p.foodType === "egg")).toBe(false);
+    const meat = browse(catalog, () => 50, { section: "meat-fish" }, sections);
+    expect(meat.length).toBeGreaterThan(0);
+    expect(meat.every((p) => p.foodType === "non_veg")).toBe(true);
+  });
+});

@@ -20,9 +20,11 @@ from smartcart.app import create_app
 from smartcart.cart_service import CartService
 from smartcart.config import Settings
 from smartcart.models import Barcode, Cart, Inventory, Product
+from smartcart.store_ops import StoreOps
 
 STORE = "S-01"
 STAFF = "Bearer dev:staff-demo"
+ADMIN = "Bearer dev:admin-demo"
 
 
 def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
@@ -40,6 +42,7 @@ class Server:
     maker: async_sessionmaker[AsyncSession]
     redis: Redis
     carts: CartService
+    ops: StoreOps
 
 
 @pytest.fixture(scope="session")
@@ -53,7 +56,7 @@ async def server() -> AsyncIterator[Server]:
         await asyncio.sleep(0.05)
     port = srv.servers[0].sockets[0].getsockname()[1]
     state = app.other_asgi_app.state
-    yield Server(f"http://127.0.0.1:{port}", state.sessionmaker, state.redis, state.carts)
+    yield Server(f"http://127.0.0.1:{port}", state.sessionmaker, state.redis, state.carts, state.ops)
     srv.should_exit = True
     await task
 

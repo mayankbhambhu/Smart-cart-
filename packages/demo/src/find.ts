@@ -7,7 +7,7 @@ import type { DemoProduct } from "./types.js";
 
 type FindProduct = Pick<
   DemoProduct,
-  "productId" | "name" | "brand" | "category" | "pricePaise" | "mrpPaise" | "dietTags" | "aisle" | "shelf" | "lowStockThreshold"
+  "productId" | "name" | "brand" | "category" | "categoryId" | "section" | "foodType" | "pricePaise" | "mrpPaise" | "dietTags" | "aisle" | "shelf" | "lowStockThreshold"
 >;
 
 const SYNONYMS: Record<string, string> = {
@@ -69,30 +69,57 @@ export function search(
   if (words.length === 0) return [];
   return products
     .filter((p) => words.every((w) => [p.name, p.brand ?? "", p.category].some((f) => f.toLowerCase().includes(w))))
-    .filter((p) => diet.every((d) => p.dietTags.includes(d)))
-    .map((p): SearchResult => {
-      const size = packSize(p.name);
-      return {
-        productId: p.productId,
-        name: p.name,
-        brand: p.brand,
-        category: p.category,
-        pricePaise: p.pricePaise,
-        mrpPaise: p.mrpPaise,
-        unitPricePaise: size ? Math.round(p.pricePaise / size[0]) : null,
-        unit: size ? size[1] : null,
-        dietTags: p.dietTags,
-        aisle: p.aisle,
-        shelf: p.shelf,
-        stock: stockStatus(available(p.productId), p.lowStockThreshold),
-      };
-    })
+    .filter((p) => matchesDiet(p, diet))
+    .map((p) => toResult(p, available))
     .sort(
       (a, b) =>
         Number(a.unitPricePaise === null) - Number(b.unitPricePaise === null) ||
         (a.unitPricePaise ?? 0) - (b.unitPricePaise ?? 0) ||
         a.name.localeCompare(b.name),
     );
+}
+
+/** "veg" keeps green-dot products only; other diet tags must all be on the pack (the API's rule). */
+export function matchesDiet(p: Pick<FindProduct, "foodType" | "dietTags">, diet: string[]): boolean {
+  return diet.every((d) => (d === "veg" ? p.foodType === "veg" : p.dietTags.includes(d)));
+}
+
+/** A section's or category's products in shelf order (GET /v1/products). */
+export function browse(
+  products: FindProduct[],
+  available: (productId: string) => number,
+  filter: { section?: string | null; category?: string | null; foodTypes?: string[]; tags?: string[] },
+  sectionOrder: { id: string; name: string; categories: { id: string }[] }[],
+): SearchResult[] {
+  const section = sectionOrder.find((s) => s.id === filter.section);
+  const order = new Map(sectionOrder.flatMap((s) => s.categories.map((c, i) => [c.id, i])));
+  return products
+    .filter((p) => (!filter.category || p.categoryId === filter.category) && (!section || p.section === section.name))
+    .filter((p) => !filter.foodTypes?.length || (p.foodType !== null && filter.foodTypes.includes(p.foodType)))
+    .filter((p) => matchesDiet(p, filter.tags ?? []))
+    .sort((a, b) => (order.get(a.categoryId) ?? 0) - (order.get(b.categoryId) ?? 0) || a.name.localeCompare(b.name))
+    .map((p) => toResult(p, available));
+}
+
+function toResult(p: FindProduct, available: (productId: string) => number): SearchResult {
+  const size = packSize(p.name);
+  return {
+    productId: p.productId,
+    name: p.name,
+    brand: p.brand,
+    category: p.category,
+    categoryId: p.categoryId,
+    section: p.section,
+    foodType: p.foodType,
+    pricePaise: p.pricePaise,
+    mrpPaise: p.mrpPaise,
+    unitPricePaise: size ? Math.round(p.pricePaise / size[0]) : null,
+    unit: size ? size[1] : null,
+    dietTags: p.dietTags,
+    aisle: p.aisle,
+    shelf: p.shelf,
+    stock: stockStatus(available(p.productId), p.lowStockThreshold),
+  };
 }
 
 const STOCK_RANK: Record<StockStatus, number> = { in_stock: 0, low: 1, unknown: 2, out: 3 };

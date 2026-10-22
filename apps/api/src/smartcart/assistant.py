@@ -103,8 +103,10 @@ Rules:
 so a staff member can assist. Do not guess.
 - Stock is "in stock", "running low" or "out of stock" exactly as given; if it says unknown, say you \
 can't confirm stock.
-- You cannot add items to the cart, take payment, change prices or reserve stock. If asked, say so \
-briefly.
+- You cannot add items to the cart, take payment, change prices or reserve stock yourself. If asked to \
+reserve, say the shopper can do it from Reserve for pickup in the app.
+- Say a product is veg, non-veg or egg only from its "label" in STORE FACTS; if it says not labelled, \
+say the pack label should be checked.
 - Prices are in rupees. When comparing, use the per-kg, per-litre or per-piece price given.
 - Reply in the shopper's language (English, Hindi or Hinglish), in at most 4 short sentences or a \
 short list. No markdown headings."""
@@ -121,9 +123,12 @@ def fact_line(p: dict[str, Any]) -> str:
     where = f"aisle {p['aisle']}, shelf {p['shelf']}" if p["aisle"] else "location unknown"
     per_unit = f", {_rupees(p['unitPricePaise'])}/{p['unit']}" if p["unitPricePaise"] else ""
     diet = f", diet: {', '.join(p['dietTags'])}" if p["dietTags"] else ""
+    label = {"veg": "veg", "non_veg": "non-veg", "egg": "egg", "not_food": "not food"}.get(
+        p.get("foodType") or "", "not labelled"
+    )
     return (
         f"- {p['name']} ({p['category']}): {where}; {_rupees(p['pricePaise'])} "
-        f"(MRP {_rupees(p['mrpPaise'])}){per_unit}; {stock}{diet}"
+        f"(MRP {_rupees(p['mrpPaise'])}){per_unit}; {stock}; label: {label}{diet}"
     )
 
 

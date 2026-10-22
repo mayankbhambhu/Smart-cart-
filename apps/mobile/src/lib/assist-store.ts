@@ -1,10 +1,11 @@
-import type { ChatTurn, HelpRequest, HelpTopic, RouteListResponse, SearchResult } from "@smart-cart/contracts";
+import type { ChatTurn, DietTag, HelpRequest, HelpTopic, RouteListResponse, SearchResult } from "@smart-cart/contracts";
 import { create } from "zustand";
 import { api } from "./api";
 import { DEFAULT_STORE_ID } from "./config";
 import { storage } from "./storage";
 
 const BUDGET_KEY = "smartcart.budgetPaise";
+const DIET_KEY = "smartcart.dietPref";
 
 export type ChatMessage = ChatTurn & { products?: SearchResult[]; mode?: "ai" | "rules" };
 
@@ -14,6 +15,8 @@ type AssistState = {
   /** The shopper's latest floor-help request, kept live by help.* events on the cart socket. */
   help: HelpRequest | null;
   budgetPaise: number | null;
+  /** The shopper's diet preference (e.g. veg only, Jain): pre-filters browse and search. */
+  dietPref: DietTag[];
   listText: string;
   route: RouteListResponse | null;
   /** Product ids ticked off on the route. */
@@ -27,6 +30,7 @@ type AssistState = {
   cancelHelp: () => Promise<void>;
   loadBudget: () => Promise<void>;
   setBudget: (paise: number | null) => Promise<void>;
+  setDietPref: (diet: DietTag[]) => Promise<void>;
   setListText: (text: string) => void;
   planRoute: (lines: string[]) => Promise<RouteListResponse>;
   togglePicked: (productId: string) => void;
@@ -37,6 +41,7 @@ export const useAssist = create<AssistState>((set, get) => ({
   storeId: DEFAULT_STORE_ID,
   help: null,
   budgetPaise: null,
+  dietPref: [],
   listText: "",
   route: null,
   picked: {},
@@ -59,8 +64,19 @@ export const useAssist = create<AssistState>((set, get) => ({
   },
 
   loadBudget: async () => {
-    const saved = await storage.get(BUDGET_KEY).catch(() => null);
-    set({ budgetPaise: saved ? Number(saved) || null : null });
+    const [saved, diet] = await Promise.all([
+      storage.get(BUDGET_KEY).catch(() => null),
+      storage.get(DIET_KEY).catch(() => null),
+    ]);
+    set({
+      budgetPaise: saved ? Number(saved) || null : null,
+      dietPref: diet ? (diet.split(",").filter(Boolean) as DietTag[]) : [],
+    });
+  },
+
+  setDietPref: async (dietPref) => {
+    set({ dietPref });
+    await (dietPref.length ? storage.set(DIET_KEY, dietPref.join(",")) : storage.remove(DIET_KEY)).catch(() => {});
   },
 
   setBudget: async (paise) => {

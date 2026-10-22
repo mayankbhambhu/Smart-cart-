@@ -10,3 +10,9 @@ export const DEFAULT_STORE_ID = "S-01";
  * so the app can be tried as a web page. Used for the GitHub Pages and preview builds only.
  */
 export const DEMO = process.env.EXPO_PUBLIC_DEMO === "1";
+/**
+ * Google, Apple and phone sign-in for shoppers run through Firebase Authentication. Until the
+ * Firebase project exists (EXPO_PUBLIC_FIREBASE_API_KEY unset), real builds offer test sign-in
+ * instead, and the demo build simulates the three.
+ */
+export const FIREBASE_READY = Boolean(process.env.EXPO_PUBLIC_FIREBASE_API_KEY);

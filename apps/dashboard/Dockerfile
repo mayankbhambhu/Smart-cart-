@@ -8,7 +8,7 @@ COPY packages/demo/package.json packages/demo/
 COPY apps/dashboard/package.json apps/dashboard/
 RUN pnpm install --frozen-lockfile --filter @smart-cart/dashboard...
 COPY packages packages
-COPY apps/api/src/smartcart/data/products.csv apps/api/src/smartcart/data/
+COPY apps/api/src/smartcart/data/products.csv apps/api/src/smartcart/data/sections.json apps/api/src/smartcart/data/
 COPY apps/dashboard apps/dashboard
 ARG NEXT_PUBLIC_API_URL=http://localhost:4000
 ARG NEXT_PUBLIC_STORE_ID=S-01

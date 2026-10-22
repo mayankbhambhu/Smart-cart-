@@ -41,9 +41,50 @@ def pg_enum(cls: type[enum.Enum], name: str) -> Enum:
 
 
 class StaffRole(enum.StrEnum):
+    floor_staff = "floor_staff"
     manager = "manager"
-    clerk = "clerk"
+    # The SmartCart team (not store staff): approves staff accounts for every store.
     admin = "admin"
+
+
+class StaffStatus(enum.StrEnum):
+    active = "active"
+    # A deactivation request is waiting for the admin team; the person cannot sign in meanwhile.
+    suspended = "suspended"
+    deactivated = "deactivated"
+
+
+class StaffRequestType(enum.StrEnum):
+    create = "create"
+    deactivate = "deactivate"
+
+
+class StaffRequestStatus(enum.StrEnum):
+    pending = "pending"
+    approved = "approved"
+    rejected = "rejected"
+    changes_requested = "changes_requested"
+
+
+class ReservationStatus(enum.StrEnum):
+    reserved = "reserved"
+    picked = "picked"
+    collected = "collected"
+    expired = "expired"
+    cancelled = "cancelled"
+
+
+class TaskType(enum.StrEnum):
+    restock = "restock"
+    pick = "pick"
+    stock_check = "stock_check"
+    other = "other"
+
+
+class TaskStatus(enum.StrEnum):
+    open = "open"
+    done = "done"
+    cancelled = "cancelled"
 
 
 class StockReason(enum.StrEnum):
@@ -121,26 +162,92 @@ class User(Base):
 
 
 class Staff(Base):
+    """A store-team account. Created only by approving a staff request, never by self sign-up."""
+
     __tablename__ = "staff"
-    __table_args__ = (Index("staff_user_id_store_id_key", "user_id", "store_id", unique=True),)
+    __table_args__ = (
+        Index("staff_user_id_store_id_key", "user_id", "store_id", unique=True),
+        Index("staff_staff_code_key", "staff_code", unique=True),
+        Index("staff_phone_key", "phone", unique=True),
+    )
     id: Mapped[str] = mapped_column(primary_key=True, default=new_id)
     user_id: Mapped[str] = mapped_column(ForeignKey("users.id", onupdate="CASCADE", ondelete="RESTRICT"))
     store_id: Mapped[str] = mapped_column(ForeignKey("stores.id", onupdate="CASCADE", ondelete="RESTRICT"))
     role: Mapped[StaffRole] = mapped_column(pg_enum(StaffRole, "StaffRole"))
+    # Sign-in: staff ID (e.g. S01-0042) or the registered mobile (+91...) plus a password.
+    staff_code: Mapped[str | None]
+    full_name: Mapped[str | None]
+    phone: Mapped[str | None]
+    shift: Mapped[str | None]
+    employee_ref: Mapped[str | None]
+    password_hash: Mapped[str | None]
+    must_change_password: Mapped[bool] = mapped_column(server_default="false", default=False)
+    temp_password_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=False))
+    failed_logins: Mapped[int] = mapped_column(Integer, server_default="0", default=0)
+    locked_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=False))
+    status: Mapped[StaffStatus] = mapped_column(
+        pg_enum(StaffStatus, "StaffStatus"), server_default="active", default=StaffStatus.active
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=False), default=utcnow, server_default=text("CURRENT_TIMESTAMP")
+    )
+
+    user: Mapped[User] = relationship()
+
+
+class FoodType(enum.StrEnum):
+    veg = "veg"
+    non_veg = "non_veg"
+    egg = "egg"
+    not_food = "not_food"
+
+
+class Section(Base):
+    """A browsing section in the app: Fruits, Dairy and eggs, Staples, ..."""
+
+    __tablename__ = "sections"
+    id: Mapped[str] = mapped_column(primary_key=True)
+    name: Mapped[str]
+    icon: Mapped[str | None]
+    sort_order: Mapped[int] = mapped_column(Integer, server_default="0")
+
+    categories: Mapped[list["Category"]] = relationship(
+        back_populates="section", order_by="Category.sort_order", lazy="selectin"
+    )
+
+
+class Category(Base):
+    __tablename__ = "categories"
+    __table_args__ = (Index("categories_section_id_idx", "section_id"),)
+    id: Mapped[str] = mapped_column(primary_key=True)
+    section_id: Mapped[str] = mapped_column(
+        ForeignKey("sections.id", onupdate="CASCADE", ondelete="RESTRICT")
+    )
+    name: Mapped[str]
+    sort_order: Mapped[int] = mapped_column(Integer, server_default="0")
+
+    section: Mapped[Section] = relationship(back_populates="categories")
 
 
 class Product(Base):
     __tablename__ = "products"
+    __table_args__ = (Index("products_category_id_idx", "category_id"),)
     id: Mapped[str] = mapped_column(primary_key=True, default=new_id)
     name: Mapped[str]
     brand: Mapped[str | None]
+    # The category's name, kept on the product so search can match it ("tea", "eggs").
     category: Mapped[str]
+    category_id: Mapped[str | None] = mapped_column(
+        ForeignKey("categories.id", onupdate="CASCADE", ondelete="SET NULL")
+    )
+    # From the pack's FSSAI dot. Null means nobody has labelled it yet: shown as "not labelled".
+    food_type: Mapped[FoodType | None] = mapped_column(pg_enum(FoodType, "FoodType"))
     image_url: Mapped[str | None]
     hsn_code: Mapped[str]
     gst_rate_bp: Mapped[int] = mapped_column(Integer)
     # Net pack weight in grams; used by the V3 weight-to-scan check.
     weight_g: Mapped[int | None] = mapped_column(Integer)
-    # Diet labels shoppers can filter by: veg, jain, no_added_sugar. Only what the pack label states.
+    # Diet claims shoppers can filter by (taxonomy.DIET_TAGS). Only what the pack label states.
     diet_tags: Mapped[list[str]] = mapped_column(ARRAY(Text), server_default="{}", default=list)
 
     barcodes: Mapped[list["Barcode"]] = relationship(back_populates="product")
@@ -374,3 +481,159 @@ class HelpRequest(Base):
     resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=False))
 
     user: Mapped[User] = relationship(foreign_keys=[user_id])
+
+
+class StaffRequest(Base):
+    """A manager asking the SmartCart admin team to add or deactivate a store-team account."""
+
+    __tablename__ = "staff_requests"
+    __table_args__ = (Index("staff_requests_status_idx", "status", "created_at"),)
+    id: Mapped[str] = mapped_column(primary_key=True, default=new_id)
+    type: Mapped[StaffRequestType] = mapped_column(pg_enum(StaffRequestType, "StaffRequestType"))
+    store_id: Mapped[str] = mapped_column(ForeignKey("stores.id", onupdate="CASCADE", ondelete="RESTRICT"))
+    requested_by: Mapped[str] = mapped_column(ForeignKey("users.id", onupdate="CASCADE", ondelete="RESTRICT"))
+    full_name: Mapped[str]
+    phone: Mapped[str]
+    role: Mapped[StaffRole] = mapped_column(pg_enum(StaffRole, "StaffRole"))
+    shift: Mapped[str | None]
+    employee_ref: Mapped[str | None]
+    # For a deactivation: the account it is about. For a creation: the account approval made.
+    staff_id: Mapped[str | None] = mapped_column(
+        ForeignKey("staff.id", onupdate="CASCADE", ondelete="SET NULL")
+    )
+    reason: Mapped[str | None]  # why to deactivate, or the reviewer's reason for rejecting
+    status: Mapped[StaffRequestStatus] = mapped_column(
+        pg_enum(StaffRequestStatus, "StaffRequestStatus"),
+        server_default="pending",
+        default=StaffRequestStatus.pending,
+    )
+    reviewed_by: Mapped[str | None] = mapped_column(
+        ForeignKey("users.id", onupdate="CASCADE", ondelete="SET NULL")
+    )
+    review_note: Mapped[str | None]
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=False), default=utcnow, server_default=text("CURRENT_TIMESTAMP")
+    )
+    decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=False))
+
+
+class AuditLog(Base):
+    """Append-only record of every staff request, decision and account change."""
+
+    __tablename__ = "audit_log"
+    __table_args__ = (Index("audit_log_at_idx", "at"),)
+    id: Mapped[str] = mapped_column(primary_key=True, default=new_id)
+    actor_id: Mapped[str | None] = mapped_column(
+        ForeignKey("users.id", onupdate="CASCADE", ondelete="SET NULL")
+    )
+    action: Mapped[str]  # e.g. staff_request.created, staff.created, staff.login_locked
+    target: Mapped[str | None]
+    details: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=False), default=utcnow, server_default=text("CURRENT_TIMESTAMP")
+    )
+
+
+class Reservation(Base):
+    """Items held for a shopper to collect in a pickup slot. Unpaid: they pay at checkout as usual."""
+
+    __tablename__ = "reservations"
+    __table_args__ = (
+        Index("reservations_store_slot_idx", "store_id", "slot_start"),
+        # One active reservation per shopper, so nobody can lock up stock.
+        Index(
+            "reservations_one_active_per_user",
+            "user_id",
+            unique=True,
+            postgresql_where=text("status IN ('reserved', 'picked')"),
+        ),
+    )
+    id: Mapped[str] = mapped_column(primary_key=True, default=new_id)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", onupdate="CASCADE", ondelete="RESTRICT"))
+    store_id: Mapped[str] = mapped_column(ForeignKey("stores.id", onupdate="CASCADE", ondelete="RESTRICT"))
+    slot_start: Mapped[datetime] = mapped_column(DateTime(timezone=False))
+    slot_end: Mapped[datetime] = mapped_column(DateTime(timezone=False))
+    status: Mapped[ReservationStatus] = mapped_column(
+        pg_enum(ReservationStatus, "ReservationStatus"),
+        server_default="reserved",
+        default=ReservationStatus.reserved,
+    )
+    # The cart staff parked the picked items in, which the shopper collects.
+    cart_id: Mapped[str | None] = mapped_column(
+        ForeignKey("carts.id", onupdate="CASCADE", ondelete="SET NULL")
+    )
+    picked_by: Mapped[str | None] = mapped_column(
+        ForeignKey("users.id", onupdate="CASCADE", ondelete="SET NULL")
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=False), default=utcnow, server_default=text("CURRENT_TIMESTAMP")
+    )
+    picked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=False))
+    closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=False))
+
+    items: Mapped[list["ReservationItem"]] = relationship(lazy="selectin", cascade="all, delete-orphan")
+    user: Mapped[User] = relationship(foreign_keys=[user_id])
+
+
+class ReservationItem(Base):
+    __tablename__ = "reservation_items"
+    reservation_id: Mapped[str] = mapped_column(
+        ForeignKey("reservations.id", onupdate="CASCADE", ondelete="CASCADE"), primary_key=True
+    )
+    product_id: Mapped[str] = mapped_column(
+        ForeignKey("products.id", onupdate="CASCADE", ondelete="RESTRICT"), primary_key=True
+    )
+    qty: Mapped[int] = mapped_column(Integer)
+    picked_qty: Mapped[int] = mapped_column(Integer, server_default="0", default=0)
+
+
+class StaffTask(Base):
+    """Work for the floor: restock (raised from low stock), pick (from reservations), or other."""
+
+    __tablename__ = "staff_tasks"
+    __table_args__ = (Index("staff_tasks_store_status_idx", "store_id", "status"),)
+    id: Mapped[str] = mapped_column(primary_key=True, default=new_id)
+    store_id: Mapped[str] = mapped_column(ForeignKey("stores.id", onupdate="CASCADE", ondelete="RESTRICT"))
+    type: Mapped[TaskType] = mapped_column(pg_enum(TaskType, "TaskType"))
+    title: Mapped[str]
+    note: Mapped[str | None]
+    # A product for restock and stock checks, a reservation for picks.
+    ref_id: Mapped[str | None]
+    assigned_to: Mapped[str | None] = mapped_column(
+        ForeignKey("staff.id", onupdate="CASCADE", ondelete="SET NULL")
+    )
+    status: Mapped[TaskStatus] = mapped_column(
+        pg_enum(TaskStatus, "TaskStatus"), server_default="open", default=TaskStatus.open
+    )
+    due_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=False))
+    created_by: Mapped[str | None] = mapped_column(
+        ForeignKey("users.id", onupdate="CASCADE", ondelete="SET NULL")
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=False), default=utcnow, server_default=text("CURRENT_TIMESTAMP")
+    )
+    done_by: Mapped[str | None] = mapped_column(
+        ForeignKey("users.id", onupdate="CASCADE", ondelete="SET NULL")
+    )
+    done_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=False))
+
+
+class StockCorrection(Base):
+    """A floor count that disagreed with the system, and the fix (the app-versus-shelf mismatch)."""
+
+    __tablename__ = "stock_corrections"
+    __table_args__ = (Index("stock_corrections_store_at_idx", "store_id", "at"),)
+    id: Mapped[str] = mapped_column(primary_key=True, default=new_id)
+    store_id: Mapped[str] = mapped_column(ForeignKey("stores.id", onupdate="CASCADE", ondelete="RESTRICT"))
+    product_id: Mapped[str] = mapped_column(
+        ForeignKey("products.id", onupdate="CASCADE", ondelete="RESTRICT")
+    )
+    system_qty: Mapped[int] = mapped_column(Integer)
+    counted_qty: Mapped[int] = mapped_column(Integer)
+    reason: Mapped[str]
+    staff_user_id: Mapped[str | None] = mapped_column(
+        ForeignKey("users.id", onupdate="CASCADE", ondelete="SET NULL")
+    )
+    at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=False), default=utcnow, server_default=text("CURRENT_TIMESTAMP")
+    )

@@ -28,6 +28,8 @@ from .models import (
     CartStatus,
     EventSource,
     Product,
+    Reservation,
+    ReservationStatus,
     User,
     utcnow,
 )
@@ -72,13 +74,22 @@ class CartService:
         cart_code: str,
         store_id: str,
         source: EventSource = EventSource.phone,
+        reservation_id: str | None = None,
     ) -> CartSnapshot:
-        """Opens a session on a physical cart. Re-pairing the same cart returns the same session."""
+        """Opens a session on a physical cart. Re-pairing the same cart returns the same session.
+        A cart holding someone's picked reservation pairs only to its owner collecting it."""
         cart = await db.get(Cart, cart_code)
         if cart is None or cart.store_id != store_id:
             raise ApiError(404, "cart_not_found")
         if cart.status == CartStatus.maintenance:
             raise ApiError(409, "cart_in_maintenance")
+        held = await db.scalar(
+            select(Reservation.id).where(
+                Reservation.cart_id == cart_code, Reservation.status == ReservationStatus.picked
+            )
+        )
+        if held and held != reservation_id:
+            raise ApiError(409, "cart_reserved")
 
         mine = await db.scalar(
             select(CartSession).where(CartSession.user_id == user_id, CartSession.status.in_(OPEN))
@@ -111,6 +122,18 @@ class CartService:
             [store_room(store_id)],
         )
         return await self.snapshot(db, session)
+
+    async def cart_busy(self, db: AsyncSession, cart_code: str) -> bool:
+        """True while a shopper is using the cart or it holds a picked reservation."""
+        session = await db.scalar(
+            select(CartSession.id).where(CartSession.cart_id == cart_code, CartSession.status.in_(OPEN))
+        )
+        held = await db.scalar(
+            select(Reservation.id).where(
+                Reservation.cart_id == cart_code, Reservation.status == ReservationStatus.picked
+            )
+        )
+        return session is not None or held is not None
 
     async def owned_session(self, db: AsyncSession, session_id: str, user_id: str) -> CartSession:
         """The session if this user owns it; 404 otherwise (never reveals other people's carts)."""

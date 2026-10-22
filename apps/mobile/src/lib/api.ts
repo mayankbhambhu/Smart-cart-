@@ -1,5 +1,15 @@
 import type {
   AskResponse,
+  BrowseResponse,
+  CollectResponse,
+  ExitCheckResponse,
+  MeResponse,
+  PickupSlot,
+  ProductSection,
+  Reservation,
+  StaffLoginResponse,
+  StaffTask,
+  StockLevel,
   CartLine,
   CartSnapshot,
   CartTotals,
@@ -19,6 +29,8 @@ export class ApiError extends Error {
   constructor(
     readonly status: number,
     readonly code: string,
+    /** Anything else the error carried, e.g. retryAfterSeconds on a locked account. */
+    readonly details: Record<string, unknown> = {},
   ) {
     super(code);
   }
@@ -36,7 +48,7 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
     try {
       return (await demo().request(method, path, body, authToken)) as T;
     } catch (e) {
-      throw e instanceof DemoApiError ? new ApiError(e.status, e.code) : e;
+      throw e instanceof DemoApiError ? new ApiError(e.status, e.code, e.extra) : e;
     }
   }
   let res: Response;
@@ -53,7 +65,10 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
     throw new ApiError(0, "network");
   }
   const data = (await res.json().catch(() => ({}))) as { error?: string };
-  if (!res.ok) throw new ApiError(res.status, data.error ?? "unknown");
+  if (!res.ok) {
+    const { error, ...details } = data;
+    throw new ApiError(res.status, error ?? "unknown", details);
+  }
   return data as T;
 }
 
@@ -122,4 +137,63 @@ export const api = {
     request<{ request: HelpRequest | null }>("GET", `/v1/stores/${storeId}/help/mine`).then((r) => r.request),
   cancelHelp: (storeId: string, id: string) =>
     request<HelpRequest>("POST", `/v1/stores/${storeId}/help/${id}`, { action: "cancel" }),
+
+  // ---- Sections (browse by aisle section and food label) ----
+  sections: (storeId: string) =>
+    request<{ sections: ProductSection[] }>("GET", `/v1/sections?storeId=${storeId}`).then((r) => r.sections),
+  browse: (storeId: string, filter: { section?: string; category?: string; foodTypes?: string[]; tags?: string[] }) => {
+    const params = new URLSearchParams({ storeId });
+    if (filter.section) params.set("section", filter.section);
+    if (filter.category) params.set("category", filter.category);
+    if (filter.foodTypes?.length) params.set("food_type", filter.foodTypes.join(","));
+    if (filter.tags?.length) params.set("tags", filter.tags.join(","));
+    return request<BrowseResponse>("GET", `/v1/products?${params}`).then((r) => r.results);
+  },
+
+  // ---- Reservations (shopper) ----
+  slots: (storeId: string) =>
+    request<{ slots: PickupSlot[] }>("GET", `/v1/stores/${storeId}/reservations/slots`).then((r) => r.slots),
+  reserve: (storeId: string, items: { productId: string; qty: number }[], slotStart: string) =>
+    request<Reservation>("POST", `/v1/stores/${storeId}/reservations`, { items, slotStart }),
+  myReservation: (storeId: string) =>
+    request<{ reservation: Reservation | null }>("GET", `/v1/stores/${storeId}/reservations/mine`).then((r) => r.reservation),
+  cancelReservation: (storeId: string, id: string) =>
+    request<Reservation>("DELETE", `/v1/stores/${storeId}/reservations/${id}`),
+  collect: (storeId: string, id: string) =>
+    request<CollectResponse>("POST", `/v1/stores/${storeId}/reservations/${id}/collect`, {}),
+
+  // ---- Store team ----
+  staffLogin: (login: string, password: string) =>
+    request<StaffLoginResponse>("POST", "/v1/auth/staff/login", { login, password }),
+  changePassword: (currentPassword: string, newPassword: string) =>
+    request<{ ok: true }>("POST", "/v1/auth/staff/password", { currentPassword, newPassword }),
+  me: () => request<MeResponse>("GET", "/v1/me"),
+};
+
+/** Staff mode on the handheld: everything under /staff/v1/stores/{store}. */
+export const staffApi = {
+  help: (storeId: string) =>
+    request<{ requests: HelpRequest[] }>("GET", `/staff/v1/stores/${storeId}/help`).then((r) => r.requests),
+  helpAction: (storeId: string, id: string, action: "acknowledge" | "resolve") =>
+    request<HelpRequest>("POST", `/staff/v1/stores/${storeId}/help/${id}`, { action }),
+  pickList: (storeId: string) =>
+    request<{ reservations: Reservation[] }>("GET", `/staff/v1/stores/${storeId}/reservations/picklist`).then(
+      (r) => r.reservations,
+    ),
+  picked: (storeId: string, id: string, cartCode: string) =>
+    request<Reservation>("POST", `/staff/v1/stores/${storeId}/reservations/${id}/picked`, { cartCode }),
+  tasks: (storeId: string) =>
+    request<{ tasks: StaffTask[] }>("GET", `/staff/v1/stores/${storeId}/tasks`).then((r) => r.tasks),
+  taskDone: (storeId: string, id: string, restocked?: number) =>
+    request<{ ok: true }>("POST", `/staff/v1/stores/${storeId}/tasks/${id}/done`, restocked ? { restocked } : {}),
+  stock: (storeId: string, barcode: string) =>
+    request<StockLevel>("GET", `/staff/v1/stores/${storeId}/stock/${encodeURIComponent(barcode)}`),
+  correct: (storeId: string, barcode: string, counted: number, reason: string) =>
+    request<StockLevel & { delta: number }>("POST", `/staff/v1/stores/${storeId}/stock-corrections`, {
+      barcode,
+      counted,
+      reason,
+    }),
+  exitCheck: (storeId: string, code: string) =>
+    request<ExitCheckResponse>("POST", `/staff/v1/stores/${storeId}/exit-checks`, { code }),
 };
