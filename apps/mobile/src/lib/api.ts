@@ -21,6 +21,8 @@ import type {
   Receipt,
   RouteListResponse,
   SearchResponse,
+  OffersResponse,
+  SearchSource,
 } from "@smart-cart/contracts";
 import { API_URL, DEMO } from "./config";
 
@@ -122,10 +124,19 @@ export const api = {
   myOrders: () => request<{ orders: Receipt[] }>("GET", "/v1/me/orders").then((r) => r.orders),
 
   // ---- Find it fast (milestone 4) ----
-  search: (storeId: string, q: string, diet: DietTag[] = []) => {
+  /** source "voice" marks a spoken search, so the store's report can count them. */
+  search: (storeId: string, q: string, diet: DietTag[] = [], source: SearchSource = "search") => {
     const params = new URLSearchParams({ q });
+    if (source !== "search") params.set("source", source);
     diet.forEach((d) => params.append("diet", d));
     return request<SearchResponse>("GET", `/v1/stores/${storeId}/products/search?${params}`).then((r) => r.results);
+  },
+  /** Deals running now, optionally only one aisle's, filtered by the shopper's diet (US-08). */
+  offers: (storeId: string, aisle: string | null = null, diet: DietTag[] = []) => {
+    const params = new URLSearchParams();
+    if (aisle) params.set("aisle", aisle);
+    diet.forEach((d) => params.append("diet", d));
+    return request<OffersResponse>("GET", `/v1/stores/${storeId}/offers?${params}`).then((r) => r.offers);
   },
   routeList: (storeId: string, lines: string[]) =>
     request<RouteListResponse>("POST", `/v1/stores/${storeId}/lists/route`, { lines }),

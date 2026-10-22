@@ -3,9 +3,12 @@ import * as Crypto from "expo-crypto";
 import { useRef, useState } from "react";
 import { Modal, Pressable, StyleSheet, Text, View } from "react-native";
 import { Button } from "../../components/Button";
+import { DealAlert } from "../../components/DealAlert";
 import { ScannerView } from "../../components/ScannerView";
 import { api, ApiError, type ProductPreview } from "../../lib/api";
+import { useAssist } from "../../lib/assist-store";
 import { useCart } from "../../lib/cart-store";
+import { useDeals } from "../../lib/deals-store";
 import { formatInr, formatRate } from "../../lib/money";
 import { colors } from "../../lib/theme";
 
@@ -47,6 +50,7 @@ export default function ScanItemScreen() {
         demoPicks={demoShelf.map((p) => ({ code: p.barcode, label: p.name, sub: `${formatInr(p.pricePaise)} · Aisle ${p.aisle}` }))}
       />
       <View style={styles.footer}>
+        <DealAlert />
         <Text style={styles.hint}>{message ?? "Point the camera at the barcode on the pack."}</Text>
         {cart && <Text style={styles.total}>Cart total {formatInr(cart.totals.totalPaise)}</Text>}
       </View>
@@ -84,6 +88,16 @@ function AddSheet({
     setError(null);
     try {
       await add(product.barcode, qty, requestId);
+      // The scanned item's aisle is where the cart is now: tell the shopper about deals there.
+      const cart = useCart.getState().cart;
+      if (cart)
+        void useDeals.getState().enteredAisle({
+          storeId: cart.storeId,
+          sessionId: cart.sessionId,
+          aisle: product.aisle,
+          diet: useAssist.getState().dietPref,
+          inCart: cart.lines.map((l) => l.productId),
+        });
       onClose(product.name);
     } catch (e) {
       setBusy(false);
@@ -124,7 +138,7 @@ function AddSheet({
 
 const styles = StyleSheet.create({
   screen: { flex: 1 },
-  footer: { padding: 16, paddingBottom: 32, gap: 4 },
+  footer: { padding: 16, paddingBottom: 32, gap: 8 },
   hint: { fontSize: 16, color: colors.text },
   total: { color: colors.muted },
   backdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.35)" },

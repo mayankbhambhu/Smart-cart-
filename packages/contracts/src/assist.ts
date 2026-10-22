@@ -36,6 +36,11 @@ export const SearchResult = z.object({
   aisle: z.string().nullable(),
   shelf: z.string().nullable(),
   stock: StockStatus,
+  /** The manager's offer behind pricePaise, when one is running (milestone 6). */
+  offer: z
+    .object({ id: z.string(), title: z.string(), regularPaise: z.number().int(), endsAt: z.iso.datetime() })
+    .nullable()
+    .optional(),
 });
 export type SearchResult = z.infer<typeof SearchResult>;
 
@@ -140,6 +145,8 @@ export const StoreInsights = z.object({
   days: z.number().int(),
   searches: z.number().int(),
   missedSearches: z.number().int(),
+  /** Searches spoken into the mic (milestone 6). */
+  voiceSearches: z.number().int(),
   topMissed: z.array(z.object({ query: z.string(), count: z.number().int(), lastAt: z.iso.datetime() })),
   help: z.object({
     total: z.number().int(),

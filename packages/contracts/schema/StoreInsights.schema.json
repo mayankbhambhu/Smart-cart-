@@ -17,6 +17,11 @@
       "minimum": -9007199254740991,
       "maximum": 9007199254740991
     },
+    "voiceSearches": {
+      "type": "integer",
+      "minimum": -9007199254740991,
+      "maximum": 9007199254740991
+    },
     "topMissed": {
       "type": "array",
       "items": {
@@ -98,6 +103,7 @@
     "days",
     "searches",
     "missedSearches",
+    "voiceSearches",
     "topMissed",
     "help"
   ]

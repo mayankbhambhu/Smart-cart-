@@ -10,6 +10,7 @@ import { api } from "../lib/api";
 import { useAssist } from "../lib/assist-store";
 import { useAuth } from "../lib/auth-store";
 import { useCart } from "../lib/cart-store";
+import { useDeals } from "../lib/deals-store";
 import { formatInr } from "../lib/money";
 import { colors } from "../lib/theme";
 
@@ -33,6 +34,7 @@ export default function HomeScreen() {
       .resume()
       .catch(() => {});
     void useAssist.getState().loadBudget();
+    void useDeals.getState().load();
     useAssist
       .getState()
       .refreshHelp()

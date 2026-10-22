@@ -64,7 +64,111 @@ SYNONYMS = {
     "semolina": "sooji",
     "gram": "besan",
     "nappies": "diapers",
+    # Spoken Hindi comes back from speech recognition in Devanagari (US-02: voice search).
+    "दूध": "milk",
+    "दही": "dahi",
+    "पनीर": "paneer",
+    "मक्खन": "butter",
+    "घी": "ghee",
+    "अंडा": "eggs",
+    "अंडे": "eggs",
+    "चावल": "rice",
+    "आटा": "atta",
+    "बेसन": "besan",
+    "सूजी": "sooji",
+    "चीनी": "sugar",
+    "शक्कर": "sugar",
+    "नमक": "salt",
+    "तेल": "oil",
+    "चाय": "tea",
+    "कॉफी": "coffee",
+    "कॉफ़ी": "coffee",
+    "हल्दी": "turmeric",
+    "मिर्च": "chilli",
+    "धनिया": "coriander",
+    "जीरा": "jeera",
+    "दाल": "dal",
+    "पोहा": "poha",
+    "बिस्कुट": "biscuit",
+    "ब्रेड": "bread",
+    "साबुन": "soap",
+    "शैम्पू": "shampoo",
+    "केला": "banana",
+    "केले": "banana",
+    "सेब": "apple",
+    "प्याज": "onion",
+    "आलू": "potato",
+    "टमाटर": "tomato",
+    "चिकन": "chicken",
+    "मछली": "fish",
+    "नूडल्स": "noodle",
+    "नमकीन": "namkeen",
+    "टूथपेस्ट": "toothpaste",
 }
+# What people say around the product name when they ask out loud: "haldi kahan milega?",
+# "where is the toor dal", "मुझे चीनी चाहिए". Dropped so the product words alone are matched.
+SPOKEN_FILLERS = frozenset(
+    [
+        "where",
+        "is",
+        "are",
+        "the",
+        "find",
+        "show",
+        "me",
+        "please",
+        "plz",
+        "want",
+        "need",
+        "buy",
+        "get",
+        "do",
+        "you",
+        "have",
+        "any",
+        "for",
+        "can",
+        "i",
+        "aisle",
+        "rack",
+        "shelf",
+        "kahan",
+        "kahaan",
+        "kaha",
+        "kidhar",
+        "hai",
+        "hain",
+        "milega",
+        "milegi",
+        "mil",
+        "kya",
+        "mujhe",
+        "chahiye",
+        "wala",
+        "wali",
+        "rakha",
+        "ka",
+        "ki",
+        "ke",
+        "ko",
+        "se",
+        "कहाँ",
+        "कहां",
+        "किधर",
+        "है",
+        "हैं",
+        "मिलेगा",
+        "मिलेगी",
+        "क्या",
+        "मुझे",
+        "चाहिए",
+        "का",
+        "की",
+        "के",
+        "में",
+        "रखा",
+    ]
+)
 # Quantities and units in a typed list ("2 kg atta", "milk x2") that are not part of the product.
 _NOISE = re.compile(r"^(\d+(\.\d+)?|x\d*|\d+x|kg|g|gm|gms|l|ltr|litre|liter|ml|pcs?|packs?|of|and|the|a)$")
 _PACK = re.compile(r"(\d+(?:\.\d+)?)\s*(kg|g|l|ml|pcs|pads|rolls|bags)\b(?:\s*x\s*(\d+))?", re.IGNORECASE)
@@ -73,8 +177,8 @@ _PACK = re.compile(r"(\d+(?:\.\d+)?)\s*(kg|g|l|ml|pcs|pads|rolls|bags)\b(?:\s*x\
 def query_words(text: str) -> list[str]:
     words = []
     for raw in re.split(r"[\s,]+", text.lower()):
-        w = raw.strip("?!.,;:()-'\"")
-        if not w or _NOISE.match(w):
+        w = raw.strip("?!.,;:()-'\"।")
+        if not w or _NOISE.match(w) or w in SPOKEN_FILLERS:
             continue
         w = SYNONYMS.get(w, w)
         if len(w) > 4 and w.endswith("s"):
@@ -180,8 +284,10 @@ class AssistService:
     ) -> list[dict[str, Any]]:
         """Products matching every word, with aisle, shelf, stock and unit price (US-02, US-03, US-05).
 
-        Cheapest per kg or litre first, so a brand comparison is the default order. Every search is
-        logged (unless source is None) so the operations lead can see which ones found nothing.
+        Products named for the words come before ones that only share the category ("ghee" finds the
+        ghee before the rest of "Oils and ghee"); then cheapest per kg or litre first, so a brand
+        comparison is the default order. Every search is logged (unless source is None) so the
+        operations lead can see which ones found nothing.
         """
         words = query_words(q)
         if not words or len(q) > 100:
@@ -196,7 +302,19 @@ class AssistService:
             )
         stmt = with_diet(stmt, diet)
         results = await self._wire(db, store_id, list((await db.execute(stmt.limit(200))).all()))
-        results.sort(key=lambda r: (r["unitPricePaise"] is None, r["unitPricePaise"] or 0, r["name"]))
+
+        def by_category_only(r: dict[str, Any]) -> bool:
+            named = f"{r['name']} {r['brand'] or ''}".lower()
+            return not all(w in named for w in words)
+
+        results.sort(
+            key=lambda r: (
+                by_category_only(r),
+                r["unitPricePaise"] is None,
+                r["unitPricePaise"] or 0,
+                r["name"],
+            )
+        )
         if source:
             await self.log_search(db, store_id, q, source, len(results))
         return results[: max(1, min(limit, 50))]
@@ -297,6 +415,7 @@ class AssistService:
                     "aisle": stock.aisle,
                     "shelf": stock.shelf,
                     "stock": stock_status(stock),
+                    "offer": price.offer.wire() if price.offer else None,
                 }
             )
         return results
@@ -494,6 +613,11 @@ class AssistService:
         )
         missed = [{"query": q, "count": n, "lastAt": at.isoformat() + "Z"} for q, n, at in missed_rows]
         missed_total = sum(m["count"] for m in missed)
+        voice = await db.scalar(
+            select(func.count()).where(
+                SearchLog.store_id == store_id, SearchLog.at >= since, SearchLog.source == "voice"
+            )
+        )
 
         help_rows = list(
             await db.scalars(
@@ -513,6 +637,7 @@ class AssistService:
             "days": days,
             "searches": searches or 0,
             "missedSearches": missed_total,
+            "voiceSearches": voice or 0,
             "topMissed": missed,
             "help": {
                 "total": len(help_rows),

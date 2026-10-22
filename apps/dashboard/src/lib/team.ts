@@ -41,6 +41,21 @@ export function passwordMessage(e: unknown): string {
   );
 }
 
+/** Messages for creating and ending offers. */
+export function offerMessage(e: unknown): string {
+  const code = e instanceof ApiError ? e.code : "";
+  return (
+    {
+      offer_price_not_lower: "The offer price must be below the product's regular price.",
+      invalid_offer_window: "An offer runs for at most 31 days, and must end after it starts.",
+      offer_exists: "This product already has an offer running. End that one first.",
+      offer_ended: "That offer has already ended.",
+      product_not_found: "Pick a product from the list.",
+      forbidden: "Only store managers can run offers.",
+    }[code] ?? "That didn't work. Try again."
+  );
+}
+
 /** Messages for the account request flow. */
 export function requestMessage(e: unknown): string {
   const code = e instanceof ApiError ? e.code : "";

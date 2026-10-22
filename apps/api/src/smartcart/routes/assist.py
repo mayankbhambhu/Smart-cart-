@@ -1,6 +1,6 @@
 """Find it fast (milestone 4): search, smart list, Ask SmartCart and floor help."""
 
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Query, Request
 
@@ -40,10 +40,13 @@ async def search(
     q: str,
     diet: Annotated[list[str] | None, Query()] = None,
     limit: int = 20,
+    source: Literal["search", "voice"] = "search",
 ) -> dict[str, Any]:
-    """Search by name, brand or category (Hindi words like haldi or chawal work too), optionally
-    filtered by diet. Each result says where it is and whether it is in stock."""
-    results = await _assist(request).search(db, store_id, q, diet=diet, limit=limit)
+    """Search by name, brand or category, optionally filtered by diet. Each result says where it is
+    and whether it is in stock. Hindi works typed in Latin (haldi, chawal) or Devanagari (हल्दी), and
+    spoken questions ("doodh kahan milega") are reduced to their item words. source=voice marks a
+    spoken search in the report."""
+    results = await _assist(request).search(db, store_id, q, diet=diet, limit=limit, source=source)
     return {"query": q, "results": results}
 
 

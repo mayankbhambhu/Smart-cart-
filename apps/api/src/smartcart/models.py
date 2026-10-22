@@ -449,7 +449,7 @@ class SearchLog(Base):
     id: Mapped[str] = mapped_column(primary_key=True, default=new_id)
     store_id: Mapped[str] = mapped_column(ForeignKey("stores.id", onupdate="CASCADE", ondelete="RESTRICT"))
     query: Mapped[str]
-    source: Mapped[str]  # search | list | assistant
+    source: Mapped[str]  # search | voice | list | assistant
     result_count: Mapped[int] = mapped_column(Integer)
     at: Mapped[datetime] = mapped_column(DateTime(timezone=False), server_default=text("CURRENT_TIMESTAMP"))
 
@@ -635,5 +635,31 @@ class StockCorrection(Base):
         ForeignKey("users.id", onupdate="CASCADE", ondelete="SET NULL")
     )
     at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=False), default=utcnow, server_default=text("CURRENT_TIMESTAMP")
+    )
+
+
+class Offer(Base):
+    """A manager's deal on one product for a time window (US-08: aisle deal alerts).
+
+    While it runs, the offer price is the price everywhere: search, the cart and checkout. Managers
+    set it; nothing here decides prices on its own.
+    """
+
+    __tablename__ = "offers"
+    __table_args__ = (Index("offers_store_ends_idx", "store_id", "ends_at"),)
+    id: Mapped[str] = mapped_column(primary_key=True, default=new_id)
+    store_id: Mapped[str] = mapped_column(ForeignKey("stores.id", onupdate="CASCADE", ondelete="RESTRICT"))
+    product_id: Mapped[str] = mapped_column(ForeignKey("products.id", onupdate="CASCADE", ondelete="CASCADE"))
+    title: Mapped[str]
+    offer_price_paise: Mapped[int] = mapped_column(Integer)
+    starts_at: Mapped[datetime] = mapped_column(DateTime(timezone=False))
+    ends_at: Mapped[datetime] = mapped_column(DateTime(timezone=False))
+    # Set when a manager ends it early.
+    ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=False))
+    created_by: Mapped[str | None] = mapped_column(
+        ForeignKey("users.id", onupdate="CASCADE", ondelete="SET NULL")
+    )
+    created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=False), default=utcnow, server_default=text("CURRENT_TIMESTAMP")
     )

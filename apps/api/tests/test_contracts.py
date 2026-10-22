@@ -6,6 +6,7 @@ import uuid
 from pathlib import Path
 from typing import Any
 
+import httpx
 import pytest
 from jsonschema import Draft202012Validator
 
@@ -151,3 +152,24 @@ async def _barcode(server: Server, product_id: str) -> str:
 
     async with server.maker() as db:
         return str(await db.scalar(select(Barcode.code).where(Barcode.product_id == product_id).limit(1)))
+
+
+@pytest.mark.integration
+async def test_deals_match_the_contract(http: httpx.AsyncClient) -> None:
+    check("OffersResponse", (await http.get(f"{BASE}/offers")).json())
+    check("OffersResponse", (await http.get(f"{BASE}/offers", params={"aisle": "A2", "diet": "veg"})).json())
+    check(
+        "StoreOffersResponse",
+        (await http.get("/admin/v1/stores/S-01/offers", headers={"authorization": STAFF})).json(),
+    )
+    found = await http.get(f"{BASE}/products/search", params={"q": "butter kahan hai", "source": "voice"})
+    check("SearchResponse", found.json())
+    assert any(r["offer"] for r in found.json()["results"]), "the seeded butter deal shows on search"
+    check(
+        "StoreInsights",
+        (await http.get("/admin/v1/stores/S-01/insights", headers={"authorization": STAFF})).json(),
+    )
+    check(
+        "OfferCreateRequest",
+        {"productId": "p1", "title": "Deal", "offerPricePaise": 100, "endsAt": "2026-10-30T18:30:00+05:30"},
+    )

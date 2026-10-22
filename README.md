@@ -59,8 +59,9 @@ through anywhere:
   (`EXPO_PUBLIC_DEMO=1`): tap a cart and products instead of scanning, and pay with the test payment.
 
 Opened in the same browser, the two talk to each other: the shopper's cart, payment, help requests
-and reservations show up on the dashboard, staff answering a help request update the phone, and
-an account approved on the dashboard can sign in on the app's Store team tab. The dashboard's
+and reservations show up on the dashboard, staff answering a help request update the phone, an
+account approved on the dashboard can sign in on the app's Store team tab, and an offer started on
+the dashboard's Offers page reprices the app and shows up as an aisle deal alert. The dashboard's
 **Shopper app** page shows the app in a phone frame beside it.
 
 Demo accounts (both demos show them on the sign-in screen):
@@ -133,6 +134,28 @@ cannot buy, price or reserve anything. Set `ANTHROPIC_API_KEY` in `apps/api/.env
 without it the same facts are turned into a plain answer by rules, which is also what the web demo
 uses.
 
+## Voice search and aisle deals
+
+On the app's Find screen, tap the mic and say the item in English or Hindi ("haldi kahan milega",
+"मुझे चीनी चाहिए", "where is the ghee"). The words around the item are dropped, Hindi item words
+(typed in Latin letters or heard in Devanagari) map to the catalogue, and the top result's aisle,
+shelf, stock and any offer are read aloud. Nothing found means saying so and pointing to floor
+help, never a guess. Spoken searches are counted on the dashboard's Reports page.
+
+- Phones use on-device recognition from `expo-speech-recognition`, which needs a development or
+  store build (`npx expo run:android` / `run:ios`, or EAS). In Expo Go the mic reports that voice
+  isn't available, and the keyboard's own mic still works.
+- The web demo uses the browser's speech recognition (Chrome on Android, Safari on iPhone).
+  Embedded previews may block the microphone; the "Try asking" examples still work there.
+
+Store managers run offers on the dashboard's **Offers** page: a product, an offer price below its
+regular price, and how long (at most 31 days; one offer per product at a time). While it runs the
+offer price is the price in search, the cart, checkout and the receipt. When a shopper scans an
+item, the app shows that aisle's deals once (respecting their diet preference, and leaving out
+what's already in the cart); the **Deals** screen lists them all and turns the alerts off. Nothing
+sets or changes an offer on its own. The seed starts eight week-long demo offers
+(`data/offers.csv`).
+
 ## Tests
 
 ```sh
@@ -177,6 +200,9 @@ be checked before the pilot.
    the app's staff mode (help inbox, pick list, tasks, stock check and correction, exit check);
    product sections with veg and non-veg labels and a diet preference; and the dashboard's
    Reservations, Staff and tasks, Reports, Staff accounts and Account approvals pages.
-6. Pilot hardening: reconnects, idempotency, rate limits, Sentry, a 20-shopper usability test.
+6. **Voice search and aisle deals**: search by voice in English or Hindi with the answer read
+   aloud (US-02); managers' offers with aisle deal alerts and a Deals screen (US-08); spoken
+   searches in Reports.
+7. Pilot hardening: reconnects, idempotency, rate limits, Sentry, a 20-shopper usability test.
 
 Deploying staging: [docs/deploy-staging.md](docs/deploy-staging.md).
