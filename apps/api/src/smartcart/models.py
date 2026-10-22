@@ -195,18 +195,59 @@ class Staff(Base):
     user: Mapped[User] = relationship()
 
 
+class FoodType(enum.StrEnum):
+    veg = "veg"
+    non_veg = "non_veg"
+    egg = "egg"
+    not_food = "not_food"
+
+
+class Section(Base):
+    """A browsing section in the app: Fruits, Dairy and eggs, Staples, ..."""
+
+    __tablename__ = "sections"
+    id: Mapped[str] = mapped_column(primary_key=True)
+    name: Mapped[str]
+    icon: Mapped[str | None]
+    sort_order: Mapped[int] = mapped_column(Integer, server_default="0")
+
+    categories: Mapped[list["Category"]] = relationship(
+        back_populates="section", order_by="Category.sort_order", lazy="selectin"
+    )
+
+
+class Category(Base):
+    __tablename__ = "categories"
+    __table_args__ = (Index("categories_section_id_idx", "section_id"),)
+    id: Mapped[str] = mapped_column(primary_key=True)
+    section_id: Mapped[str] = mapped_column(
+        ForeignKey("sections.id", onupdate="CASCADE", ondelete="RESTRICT")
+    )
+    name: Mapped[str]
+    sort_order: Mapped[int] = mapped_column(Integer, server_default="0")
+
+    section: Mapped[Section] = relationship(back_populates="categories")
+
+
 class Product(Base):
     __tablename__ = "products"
+    __table_args__ = (Index("products_category_id_idx", "category_id"),)
     id: Mapped[str] = mapped_column(primary_key=True, default=new_id)
     name: Mapped[str]
     brand: Mapped[str | None]
+    # The category's name, kept on the product so search can match it ("tea", "eggs").
     category: Mapped[str]
+    category_id: Mapped[str | None] = mapped_column(
+        ForeignKey("categories.id", onupdate="CASCADE", ondelete="SET NULL")
+    )
+    # From the pack's FSSAI dot. Null means nobody has labelled it yet: shown as "not labelled".
+    food_type: Mapped[FoodType | None] = mapped_column(pg_enum(FoodType, "FoodType"))
     image_url: Mapped[str | None]
     hsn_code: Mapped[str]
     gst_rate_bp: Mapped[int] = mapped_column(Integer)
     # Net pack weight in grams; used by the V3 weight-to-scan check.
     weight_g: Mapped[int | None] = mapped_column(Integer)
-    # Diet labels shoppers can filter by: veg, jain, no_added_sugar. Only what the pack label states.
+    # Diet claims shoppers can filter by (taxonomy.DIET_TAGS). Only what the pack label states.
     diet_tags: Mapped[list[str]] = mapped_column(ARRAY(Text), server_default="{}", default=list)
 
     barcodes: Mapped[list["Barcode"]] = relationship(back_populates="product")

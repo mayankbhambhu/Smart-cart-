@@ -7,7 +7,15 @@ import { z } from "zod";
 export const StockStatus = z.enum(["in_stock", "low", "out", "unknown"]);
 export type StockStatus = z.infer<typeof StockStatus>;
 
-export const DietTag = z.enum(["veg", "jain", "no_added_sugar"]);
+/**
+ * The pack's FSSAI mark: green dot veg, brown dot non-veg. Egg products carry the brown dot and an
+ * "egg" tag. null means nobody has labelled the product yet; the apps show "not labelled", never a guess.
+ */
+export const FoodType = z.enum(["veg", "non_veg", "egg", "not_food"]);
+export type FoodType = z.infer<typeof FoodType>;
+
+/** Diet filters: "veg" keeps green-dot products; the rest are claims printed on the pack. */
+export const DietTag = z.enum(["veg", "jain", "vegan", "gluten_free", "sugar_free", "no_added_sugar"]);
 export type DietTag = z.infer<typeof DietTag>;
 
 export const SearchResult = z.object({
@@ -15,6 +23,10 @@ export const SearchResult = z.object({
   name: z.string(),
   brand: z.string().nullable(),
   category: z.string(),
+  categoryId: z.string().nullable(),
+  /** The browsing section, e.g. "Dairy and eggs". */
+  section: z.string().nullable(),
+  foodType: FoodType.nullable(),
   pricePaise: z.number().int(),
   mrpPaise: z.number().int(),
   /** Price per kg, litre or piece for comparing brands and pack sizes; null if the pack size is unknown. */
@@ -29,6 +41,32 @@ export type SearchResult = z.infer<typeof SearchResult>;
 
 export const SearchResponse = z.object({ query: z.string(), results: z.array(SearchResult) });
 export type SearchResponse = z.infer<typeof SearchResponse>;
+
+export const ProductCategory = z.object({ id: z.string(), name: z.string(), productCount: z.number().int() });
+export type ProductCategory = z.infer<typeof ProductCategory>;
+
+/** A browsing section: Fruits, Vegetables, Dairy and eggs, Meat and fish, Staples, ... */
+export const ProductSection = z.object({
+  id: z.string(),
+  name: z.string(),
+  icon: z.string().nullable(),
+  productCount: z.number().int(),
+  categories: z.array(ProductCategory),
+});
+export type ProductSection = z.infer<typeof ProductSection>;
+
+export const SectionsResponse = z.object({ storeId: z.string(), sections: z.array(ProductSection) });
+export type SectionsResponse = z.infer<typeof SectionsResponse>;
+
+/** GET /v1/products?section=&category=&food_type=&tags= */
+export const BrowseResponse = z.object({
+  storeId: z.string(),
+  section: z.string().nullable(),
+  category: z.string().nullable(),
+  /** In shelf order: category by category. */
+  results: z.array(SearchResult),
+});
+export type BrowseResponse = z.infer<typeof BrowseResponse>;
 
 export const RouteListRequest = z.object({ lines: z.array(z.string()).min(1).max(60) });
 export type RouteListRequest = z.infer<typeof RouteListRequest>;

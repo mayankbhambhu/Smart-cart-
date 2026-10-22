@@ -52,6 +52,9 @@ def test_requests_the_app_sends_are_valid() -> None:
 async def test_find_it_fast_responses_match_the_contract(api: Api, server: Server, dal: Item) -> None:
     base = "/v1/stores/S-01"
     check("SearchResponse", (await api.http.get(f"{base}/products/search", params={"q": "dal"})).json())
+    check("SectionsResponse", (await api.http.get("/v1/sections")).json())
+    browse = await api.http.get("/v1/products", params={"section": "meat-fish", "food_type": "non_veg"})
+    check("BrowseResponse", browse.json())
     route = await api.http.post(f"{base}/lists/route", json={"lines": ["milk", "atta", "unicorn"]})
     check("RouteListResponse", route.json())
 

@@ -27,7 +27,8 @@ import type {
 } from "@smart-cart/contracts";
 import { catalog } from "./catalog.js";
 import { DemoApiError } from "./errors.js";
-import { retrieve, routeList, rulesAnswer, search } from "./find.js";
+import { browse, retrieve, routeList, rulesAnswer, search } from "./find.js";
+import { sections } from "./sections.js";
 import { exitCode, gstIncluded } from "./money.js";
 import { DEMO_LOGINS, StoreTeam, type Caller } from "./team.js";
 import type { DemoProduct } from "./types.js";
@@ -174,6 +175,8 @@ export class ShopperDemo {
     if ((match = route("GET", /^\/v1\/stores\/[^/]+\/products\/search$/))) {
       return { query: url.searchParams.get("q"), results: this.find(url.searchParams.get("q") ?? "", url.searchParams.getAll("diet")).slice(0, 20) };
     }
+    if (route("GET", /^\/v1\/sections$/)) return sectionsResponse();
+    if (route("GET", /^\/v1\/products$/)) return browseResponse(url, (id) => this.available(id));
     if (route("POST", /^\/v1\/stores\/[^/]+\/lists\/route$/)) {
       return routeList((q) => this.find(q), (body as { lines: string[] }).lines) satisfies RouteListResponse;
     }
@@ -671,6 +674,29 @@ export class ShopperDemo {
   ): SmartCartEvent {
     return { type, eventId: uuid(), storeId: STORE_ID, cartId, source, occurredAt: now(), data } as SmartCartEvent;
   }
+}
+
+/** GET /v1/sections: every section with its categories and how many products each holds. */
+export function sectionsResponse() {
+  const count = new Map<string, number>();
+  for (const p of catalog) count.set(p.categoryId, (count.get(p.categoryId) ?? 0) + 1);
+  return {
+    storeId: STORE_ID,
+    sections: sections.map((s) => {
+      const categories = s.categories.map((c) => ({ ...c, productCount: count.get(c.id) ?? 0 }));
+      return { ...s, productCount: categories.reduce((n, c) => n + c.productCount, 0), categories };
+    }),
+  };
+}
+
+/** GET /v1/products?section=&category=&food_type=&tags= */
+export function browseResponse(url: URL, available: (productId: string) => number) {
+  const list = (key: string) => url.searchParams.getAll(key).flatMap((v) => v.split(",")).filter(Boolean);
+  const section = url.searchParams.get("section");
+  const category = url.searchParams.get("category");
+  if (!section && !category) throw new DemoApiError(400, "section_or_category_required");
+  const results = browse(catalog, available, { section, category, foodTypes: list("food_type"), tags: list("tags") }, sections);
+  return { storeId: STORE_ID, section, category, results };
 }
 
 function gstSummary(lines: CartLine[]) {

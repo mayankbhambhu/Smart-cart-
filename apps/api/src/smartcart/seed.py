@@ -14,7 +14,21 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from .config import get_settings
 from .db import make_engine, make_sessionmaker
-from .models import Barcode, Cart, Inventory, Product, Staff, StaffRole, Store, StorePrice, User
+from .models import (
+    Barcode,
+    Cart,
+    Category,
+    FoodType,
+    Inventory,
+    Product,
+    Section,
+    Staff,
+    StaffRole,
+    Store,
+    StorePrice,
+    User,
+)
+from .taxonomy import SECTIONS, category_id
 
 STORE_ID = "S-01"
 CART_COUNT = 20
@@ -49,6 +63,24 @@ async def seed(db: AsyncSession) -> int:
             .on_conflict_do_nothing(index_elements=["id"])
         )
 
+    categories: dict[str, str] = {}
+    for order, (section_id, name, icon, names) in enumerate(SECTIONS):
+        values = {"name": name, "icon": icon, "sort_order": order}
+        await db.execute(
+            insert(Section)
+            .values(id=section_id, **values)
+            .on_conflict_do_update(index_elements=["id"], set_=values)
+        )
+        for n, cat in enumerate(names):
+            cid = category_id(section_id, cat)
+            values = {"section_id": section_id, "name": cat, "sort_order": n}
+            await db.execute(
+                insert(Category)
+                .values(id=cid, **values)
+                .on_conflict_do_update(index_elements=["id"], set_=values)
+            )
+            categories[cat] = cid
+
     with CSV_PATH.open(newline="", encoding="utf-8") as f:
         rows = list(csv.DictReader(f))
     for r in rows:
@@ -59,6 +91,8 @@ async def seed(db: AsyncSession) -> int:
             "name": r["name"],
             "brand": _opt(r["brand"]),
             "category": r["category"],
+            "category_id": categories[r["category"]],
+            "food_type": FoodType(r["food_type"]) if r.get("food_type") else None,
             "hsn_code": r["hsn_code"],
             "gst_rate_bp": int(r["gst_rate_bp"]),
             "weight_g": int(r["weight_g"]) if r["weight_g"] else None,

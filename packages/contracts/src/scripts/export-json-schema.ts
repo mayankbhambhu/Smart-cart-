@@ -3,7 +3,14 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { z } from "zod";
-import { AskResponse, RouteListResponse, SearchResponse, StoreInsights } from "../assist.js";
+import {
+  AskResponse,
+  BrowseResponse,
+  RouteListResponse,
+  SearchResponse,
+  SectionsResponse,
+  StoreInsights,
+} from "../assist.js";
 import { AddItemRequest, CartSnapshot, PairCartRequest } from "../cart.js";
 import { SmartCartEvent } from "../events.js";
 import { CheckoutResponse, ExitCheckResponse, Receipt } from "../order.js";
@@ -35,6 +42,8 @@ const schemas = {
   RouteListResponse,
   AskResponse,
   StoreInsights,
+  SectionsResponse,
+  BrowseResponse,
   StaffLoginResponse,
   MeResponse,
   StaffAccount,

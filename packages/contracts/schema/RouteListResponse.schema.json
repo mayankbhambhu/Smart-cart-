@@ -39,6 +39,34 @@
                     "category": {
                       "type": "string"
                     },
+                    "categoryId": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "section": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "foodType": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "enum": [
+                            "veg",
+                            "non_veg",
+                            "egg",
+                            "not_food"
+                          ]
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
                     "pricePaise": {
                       "type": "integer",
                       "minimum": -9007199254740991,
@@ -109,6 +137,9 @@
                     "name",
                     "brand",
                     "category",
+                    "categoryId",
+                    "section",
+                    "foodType",
                     "pricePaise",
                     "mrpPaise",
                     "unitPricePaise",

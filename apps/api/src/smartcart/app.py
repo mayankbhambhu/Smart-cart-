@@ -126,6 +126,7 @@ def create_app(settings: Settings | None = None, *, run_sweeper: bool = True) ->
         admin.router,
         assist.router,
         assist.admin_router,
+        assist.catalog_router,
         staff.auth_router,
         staff.shopper_router,
         staff.floor_router,

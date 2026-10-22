@@ -249,3 +249,14 @@ class StockCorrectionRequest(Wire):
     barcode: str = Field(min_length=4, max_length=20)
     counted: int = Field(ge=0, le=100_000)
     reason: str = Field(min_length=3, max_length=200)
+
+
+class ProductLabelRequest(Wire):
+    """Only the fields sent are changed. food_type null means "not labelled"."""
+
+    category_id: str | None = None
+    food_type: Literal["veg", "non_veg", "egg", "not_food"] | None = None
+    diet_tags: list[str] | None = Field(default=None, max_length=10)
+
+    def wire(self) -> dict[str, Any]:
+        return self.model_dump(by_alias=True, mode="json", exclude_unset=True)

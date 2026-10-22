@@ -1,0 +1,137 @@
+[
+  {
+    "id": "fruits",
+    "name": "Fruits",
+    "icon": "🍎",
+    "categories": [
+      "Fresh fruits"
+    ]
+  },
+  {
+    "id": "vegetables",
+    "name": "Vegetables",
+    "icon": "🥦",
+    "categories": [
+      "Fresh vegetables",
+      "Herbs and greens"
+    ]
+  },
+  {
+    "id": "dairy-eggs",
+    "name": "Dairy and eggs",
+    "icon": "🥛",
+    "categories": [
+      "Milk",
+      "Curd and dahi",
+      "Butter and cheese",
+      "Paneer",
+      "Eggs"
+    ]
+  },
+  {
+    "id": "meat-fish",
+    "name": "Meat and fish",
+    "icon": "🍗",
+    "categories": [
+      "Chicken",
+      "Mutton",
+      "Fish and seafood"
+    ]
+  },
+  {
+    "id": "staples",
+    "name": "Staples",
+    "icon": "🌾",
+    "categories": [
+      "Atta and flours",
+      "Rice",
+      "Poha",
+      "Dals and pulses",
+      "Oils and ghee",
+      "Salt and sugar"
+    ]
+  },
+  {
+    "id": "spices",
+    "name": "Spices and masala",
+    "icon": "🌶️",
+    "categories": [
+      "Powders",
+      "Masalas"
+    ]
+  },
+  {
+    "id": "bakery",
+    "name": "Bakery",
+    "icon": "🍞",
+    "categories": [
+      "Bread"
+    ]
+  },
+  {
+    "id": "snacks",
+    "name": "Snacks and packaged food",
+    "icon": "🍪",
+    "categories": [
+      "Biscuits",
+      "Chips and namkeen",
+      "Chocolates",
+      "Breakfast cereals",
+      "Noodles",
+      "Spreads and sauces",
+      "Pickles"
+    ]
+  },
+  {
+    "id": "beverages",
+    "name": "Beverages",
+    "icon": "🥤",
+    "categories": [
+      "Tea",
+      "Coffee",
+      "Juices",
+      "Soft drinks",
+      "Water"
+    ]
+  },
+  {
+    "id": "frozen",
+    "name": "Frozen",
+    "icon": "🧊",
+    "categories": [
+      "Ice cream",
+      "Frozen snacks",
+      "Frozen non-veg"
+    ]
+  },
+  {
+    "id": "personal-care",
+    "name": "Personal care",
+    "icon": "🧴",
+    "categories": [
+      "Bath and handwash",
+      "Hair care",
+      "Oral care",
+      "Feminine hygiene"
+    ]
+  },
+  {
+    "id": "household",
+    "name": "Household and cleaning",
+    "icon": "🧽",
+    "categories": [
+      "Detergents",
+      "Dishwash",
+      "Floor and toilet cleaners",
+      "Paper and bags"
+    ]
+  },
+  {
+    "id": "baby-care",
+    "name": "Baby care",
+    "icon": "🍼",
+    "categories": [
+      "Diapers"
+    ]
+  }
+]
