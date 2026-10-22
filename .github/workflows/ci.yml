@@ -64,7 +64,11 @@ jobs:
         working-directory: .
       - name: Mobile app smoke test against the API
         run: |
-          uv run python -m smartcart.main > api.log 2>&1 &
+          # Run from .venv rather than `uv run` so the server holds no uv cache lock,
+          # which would stall setup-uv's post-job cache prune.
+          .venv/bin/python -m smartcart.main > api.log 2>&1 &
+          API_PID=$!
+          trap 'kill $API_PID' EXIT
           for i in $(seq 1 30); do curl -sf localhost:4000/readyz && break; sleep 1; done
           EXPO_PUBLIC_API_URL=http://localhost:4000 pnpm --filter @smart-cart/mobile smoke || { cat api.log; exit 1; }
 
