@@ -1,0 +1,25 @@
+node_modules/
+dist/
+.next/
+out/
+coverage/
+*.tsbuildinfo
+.env
+.env.*
+!.env.example
+.DS_Store
+
+# Flutter
+apps/mobile/.dart_tool/
+apps/mobile/build/
+apps/mobile/.flutter-plugins*
+apps/mobile/.packages
+apps/mobile/ios/Pods/
+apps/mobile/android/.gradle/
+apps/mobile/android/local.properties
+
+# Terraform
+infra/terraform/**/.terraform/
+infra/terraform/**/*.tfstate*
+infra/terraform/**/*.tfvars
+!infra/terraform/**/*.tfvars.example

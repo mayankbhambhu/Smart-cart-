@@ -1,0 +1,286 @@
+// Smart Cart V1 data model. See docs/architecture.md, "Data model".
+// Money is integer paise. Rates are basis points (18% GST = 1800).
+// Every store-scoped table carries store_id so multi-store is data, not a migration.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Store {
+  id        String   @id // e.g. S-01
+  name      String
+  city      String
+  timezone  String   @default("Asia/Kolkata")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  staff          Staff[]
+  prices         StorePrice[]
+  inventory      Inventory[]
+  stockMovements StockMovement[]
+  carts          Cart[]
+  orders         Order[]
+
+  @@map("stores")
+}
+
+model User {
+  id          String   @id @default(uuid())
+  firebaseUid String   @unique @map("firebase_uid")
+  name        String?
+  phone       String?
+  email       String?
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  staff    Staff[]
+  sessions CartSession[]
+  orders   Order[]
+
+  @@map("users")
+}
+
+enum StaffRole {
+  manager
+  clerk
+  admin
+}
+
+model Staff {
+  id      String    @id @default(uuid())
+  userId  String    @map("user_id")
+  storeId String    @map("store_id")
+  role    StaffRole
+
+  user  User  @relation(fields: [userId], references: [id])
+  store Store @relation(fields: [storeId], references: [id])
+
+  @@unique([userId, storeId])
+  @@map("staff")
+}
+
+model Product {
+  id        String  @id @default(uuid())
+  name      String
+  brand     String?
+  category  String
+  imageUrl  String? @map("image_url")
+  hsnCode   String  @map("hsn_code")
+  gstRateBp Int     @map("gst_rate_bp")
+  /// Net pack weight in grams; used by the V3 weight-to-scan check.
+  weightG   Int?    @map("weight_g")
+
+  barcodes    Barcode[]
+  prices      StorePrice[]
+  inventory   Inventory[]
+  orderItems  OrderItem[]
+  cartEvents  CartEvent[]
+  movements   StockMovement[]
+
+  @@map("products")
+}
+
+model Barcode {
+  code      String @id // EAN-13
+  productId String @map("product_id")
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([productId])
+  @@map("barcodes")
+}
+
+model StorePrice {
+  id         String   @id @default(uuid())
+  storeId    String   @map("store_id")
+  productId  String   @map("product_id")
+  mrpPaise   Int      @map("mrp_paise")
+  pricePaise Int      @map("price_paise")
+  validFrom  DateTime @default(now()) @map("valid_from")
+
+  store   Store   @relation(fields: [storeId], references: [id])
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([storeId, productId, validFrom(sort: Desc)])
+  @@map("store_prices")
+}
+
+model Inventory {
+  storeId           String @map("store_id")
+  productId         String @map("product_id")
+  onHand            Int    @map("on_hand")
+  reserved          Int    @default(0)
+  lowStockThreshold Int    @default(10) @map("low_stock_threshold")
+  /// Aisle and shelf are captured now for V3 aisle routing.
+  aisle             String?
+  shelf             String?
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  store   Store   @relation(fields: [storeId], references: [id])
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@id([storeId, productId])
+  @@map("inventory")
+}
+
+enum StockReason {
+  sale
+  restock
+  adjust
+}
+
+model StockMovement {
+  id        String      @id @default(uuid())
+  storeId   String      @map("store_id")
+  productId String      @map("product_id")
+  delta     Int
+  reason    StockReason
+  refId     String?     @map("ref_id")
+  at        DateTime    @default(now())
+
+  store   Store   @relation(fields: [storeId], references: [id])
+  product Product @relation(fields: [productId], references: [id])
+
+  @@index([storeId, productId, at])
+  @@map("stock_movements")
+}
+
+enum CartStatus {
+  available
+  in_use
+  maintenance
+}
+
+model Cart {
+  id         String     @id // printed cart code, e.g. C-0042
+  storeId    String     @map("store_id")
+  qrCode     String     @unique @map("qr_code")
+  status     CartStatus @default(available)
+  /// AWS IoT Core thing name, set in V2.
+  hardwareId String?    @unique @map("hardware_id")
+
+  store    Store         @relation(fields: [storeId], references: [id])
+  sessions CartSession[]
+
+  @@index([storeId, status])
+  @@map("carts")
+}
+
+enum CartSessionStatus {
+  active
+  checking_out
+  paid
+  abandoned
+}
+
+model CartSession {
+  id        String            @id @default(uuid())
+  cartId    String            @map("cart_id")
+  userId    String            @map("user_id")
+  status    CartSessionStatus @default(active)
+  startedAt DateTime          @default(now()) @map("started_at")
+  endedAt   DateTime?         @map("ended_at")
+
+  cart   Cart        @relation(fields: [cartId], references: [id])
+  user   User        @relation(fields: [userId], references: [id])
+  events CartEvent[]
+  order  Order?
+
+  @@index([cartId, status])
+  @@map("cart_sessions")
+}
+
+enum EventSource {
+  phone
+  cart
+  system
+  staff
+}
+
+/// Append-only log of cart changes. The live Redis cart is a projection of this table.
+model CartEvent {
+  id        String      @id @default(uuid())
+  sessionId String      @map("session_id")
+  type      String
+  productId String?     @map("product_id")
+  qty       Int?
+  source    EventSource
+  requestId String?     @unique @map("request_id")
+  at        DateTime    @default(now())
+
+  session CartSession @relation(fields: [sessionId], references: [id])
+  product Product?    @relation(fields: [productId], references: [id])
+
+  @@index([sessionId, at])
+  @@map("cart_events")
+}
+
+enum OrderStatus {
+  pending_payment
+  paid
+  cancelled
+  refunded
+}
+
+model Order {
+  id            String      @id @default(uuid())
+  sessionId     String      @unique @map("session_id")
+  userId        String      @map("user_id")
+  storeId       String      @map("store_id")
+  subtotalPaise Int         @map("subtotal_paise")
+  taxPaise      Int         @map("tax_paise")
+  totalPaise    Int         @map("total_paise")
+  status        OrderStatus @default(pending_payment)
+  exitCode      String?     @unique @map("exit_code")
+  exitUsedAt    DateTime?   @map("exit_used_at")
+  createdAt     DateTime    @default(now()) @map("created_at")
+
+  session  CartSession @relation(fields: [sessionId], references: [id])
+  user     User        @relation(fields: [userId], references: [id])
+  store    Store       @relation(fields: [storeId], references: [id])
+  items    OrderItem[]
+  payments Payment[]
+
+  @@index([storeId, createdAt])
+  @@map("orders")
+}
+
+model OrderItem {
+  orderId        String @map("order_id")
+  productId      String @map("product_id")
+  qty            Int
+  unitPricePaise Int    @map("unit_price_paise")
+  gstRateBp      Int    @map("gst_rate_bp")
+
+  order   Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id])
+
+  @@id([orderId, productId])
+  @@map("order_items")
+}
+
+enum PaymentStatus {
+  created
+  succeeded
+  failed
+  refunded
+}
+
+model Payment {
+  id                String        @id @default(uuid())
+  orderId           String        @map("order_id")
+  provider          String // "stripe" in V1; "razorpay" possible later
+  providerOrderId   String?       @unique @map("provider_order_id")
+  providerPaymentId String?       @map("provider_payment_id")
+  status            PaymentStatus @default(created)
+  rawWebhook        Json?         @map("raw_webhook")
+  createdAt         DateTime      @default(now()) @map("created_at")
+
+  order Order @relation(fields: [orderId], references: [id])
+
+  @@index([orderId])
+  @@map("payments")
+}

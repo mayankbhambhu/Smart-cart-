@@ -1,0 +1,88 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  node:
+    name: API, contracts and dashboard
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: smartcart
+          POSTGRES_PASSWORD: smartcart
+          POSTGRES_DB: smartcart
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U smartcart" --health-interval 5s --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping" --health-interval 5s --health-retries 10
+    env:
+      DATABASE_URL: postgresql://smartcart:smartcart@localhost:5432/smartcart?schema=public
+      REDIS_URL: redis://localhost:6379
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @smart-cart/contracts build
+      - name: Contract JSON Schemas are up to date
+        run: git diff --exit-code packages/contracts/schema
+      - run: pnpm --filter @smart-cart/api db:generate
+      - run: pnpm --filter @smart-cart/api exec prisma migrate deploy
+      - run: pnpm --filter @smart-cart/api db:seed
+      - run: pnpm typecheck
+      - run: pnpm test
+      - run: pnpm --filter @smart-cart/api build
+      - run: pnpm --filter @smart-cart/dashboard build
+
+  mobile:
+    name: Flutter app
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/mobile
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - run: flutter analyze
+      - run: flutter test
+
+  terraform:
+    name: Terraform (validate only, never applies)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: infra/terraform/staging
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+      - run: terraform fmt -check -recursive
+      - run: terraform init -backend=false -input=false
+      - run: terraform validate
+
+  images:
+    name: Docker images build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -f apps/api/Dockerfile -t smart-cart/api:ci .
+      - run: docker build -f apps/dashboard/Dockerfile -t smart-cart/dashboard:ci .
