@@ -3,7 +3,7 @@
 import { DEMO } from "@/lib/api";
 
 // The app demo is built next to the dashboard (out/app/), so it is one folder up from this page.
-const APP_URL = "../app/";
+const APP_URL = process.env.NEXT_PUBLIC_SHOPPER_APP_URL || "../app/";
 
 const steps = [
   "Sign in with any name, then tap Start shopping and pick a cart.",
