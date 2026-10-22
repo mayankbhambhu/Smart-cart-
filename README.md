@@ -30,6 +30,7 @@ pnpm install
 docker compose -f infra/docker-compose.yml up -d postgres redis
 cp apps/api/.env.example apps/api/.env
 pnpm --filter @smart-cart/contracts build
+pnpm --filter @smart-cart/api db:generate
 pnpm --filter @smart-cart/api exec prisma migrate deploy
 pnpm db:seed
 pnpm dev:api          # http://localhost:4000/readyz

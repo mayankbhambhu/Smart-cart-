@@ -9,6 +9,7 @@
     "start": "node dist/src/main.js",
     "typecheck": "prisma generate && tsc -p tsconfig.json --noEmit",
     "lint": "tsc -p tsconfig.json --noEmit",
+    "db:generate": "prisma generate",
     "test": "vitest run",
     "db:migrate": "prisma migrate dev",
     "db:deploy": "prisma migrate deploy",

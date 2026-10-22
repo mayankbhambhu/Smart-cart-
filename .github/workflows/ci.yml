@@ -42,6 +42,7 @@ jobs:
       - run: pnpm --filter @smart-cart/contracts build
       - name: Contract JSON Schemas are up to date
         run: git diff --exit-code packages/contracts/schema
+      - run: pnpm --filter @smart-cart/api db:generate
       - run: pnpm --filter @smart-cart/api exec prisma migrate deploy
       - run: pnpm --filter @smart-cart/api db:seed
       - run: pnpm typecheck
