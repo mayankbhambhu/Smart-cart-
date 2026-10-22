@@ -27,7 +27,7 @@ scripts/smoke.ts    drives the API client and realtime code against a running AP
 4. Sign in with any name, pick the store, and scan a cart QR. To make one, encode
    `smartcart://pair?cart=C-0001&store=S-01` in any QR generator, or type `C-0001`.
 5. Scan items. The demo barcodes are synthetic (`2000000000015` is Amul Toned Milk 500 ml);
-   print some from `apps/api/prisma/data/products.csv` or type them in.
+   print some from `apps/api/src/smartcart/data/products.csv` or type them in.
 
 Open the dashboard's **Active carts** page alongside to watch the cart update live.
 

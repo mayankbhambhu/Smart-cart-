@@ -17,6 +17,6 @@ output "migrate_command" {
     "aws ecs run-task --region ${var.region} --cluster ${aws_ecs_cluster.main.name}",
     "--launch-type FARGATE --task-definition ${aws_ecs_task_definition.api.family}",
     "--network-configuration 'awsvpcConfiguration={subnets=[${join(",", aws_subnet.public[*].id)}],securityGroups=[${aws_security_group.app.id}],assignPublicIp=ENABLED}'",
-    "--overrides '{\"containerOverrides\":[{\"name\":\"api\",\"command\":[\"sh\",\"-c\",\"node_modules/.bin/prisma migrate deploy && node dist/prisma/seed.js\"]}]}'",
+    "--overrides '{\"containerOverrides\":[{\"name\":\"api\",\"command\":[\"sh\",\"-c\",\"alembic upgrade head && python -m smartcart.seed\"]}]}'",
   ])
 }

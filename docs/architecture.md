@@ -9,9 +9,10 @@ Key decisions it records, so they travel with the code:
   publishes through AWS IoT Core; consumers do not care which.
 - **Server is the source of truth** for prices, GST and totals. Money is integer paise; GST rates
   are basis points; Indian shelf prices are GST inclusive, so tax is extracted, not added
-  (`apps/api/src/lib/money.ts`).
+  (`apps/api/src/smartcart/money.py`).
 - **Every store-scoped table carries `store_id`** so a second store is data, not a migration.
-- **Modular monolith.** One Fastify service whose modules own their own tables.
+- **Modular monolith.** One Python service (FastAPI, SQLAlchemy, python-socketio) whose modules
+  own their own tables. Python also suits the later analytics and anti-theft work.
 - **Payments** go through a `PaymentProvider` interface: Stripe first, a Razorpay adapter if the
   pilot needs UPI. An order is paid only when the provider's webhook says so.
 - **AWS ap-south-1 from the first deploy**, defined in Terraform (`infra/terraform`).

@@ -10,11 +10,11 @@ Architecture: [docs/architecture.md](docs/architecture.md).
 
 ```
 apps/
-  api/          Node 22 + TypeScript, Fastify, Prisma (PostgreSQL), Redis
+  api/          Python 3.12: FastAPI, SQLAlchemy + Alembic (PostgreSQL), Redis, python-socketio
   dashboard/    Next.js 15 + Tailwind: store staff dashboard
   mobile/       React Native (Expo) app for Android and iPhone
 packages/
-  contracts/    Shared event and API schemas (zod), exported as JSON Schema for Dart
+  contracts/    Shared event and API schemas (zod), exported as JSON Schema; the API is tested against them
 infra/
   docker-compose.yml     Local Postgres, Redis, API and dashboard
   terraform/staging/     AWS ap-south-1 staging stack (not applied by CI)
@@ -23,15 +23,15 @@ docs/
 
 ## Run it locally
 
-Needs Node 22, pnpm 10 and Docker. The mobile app runs in Expo Go on your phone.
+Needs Node 22, pnpm 10, [uv](https://docs.astral.sh/uv/) (it installs Python 3.12 for you) and Docker. The mobile app runs in Expo Go on your phone.
 
 ```sh
 pnpm install
+(cd apps/api && uv sync)
 docker compose -f infra/docker-compose.yml up -d postgres redis
 cp apps/api/.env.example apps/api/.env
 pnpm --filter @smart-cart/contracts build
-pnpm --filter @smart-cart/api db:generate
-pnpm --filter @smart-cart/api exec prisma migrate deploy
+pnpm db:migrate
 pnpm db:seed
 pnpm dev:api          # http://localhost:4000/readyz
 pnpm dev:dashboard    # http://localhost:3000
@@ -45,7 +45,7 @@ Mobile: see [apps/mobile/README.md](apps/mobile/README.md).
 
 Until the Firebase project exists, run the API with `AUTH_MODE=dev` (the default outside
 production). It then accepts bearer tokens of the form `dev:<uid>` or `dev:<uid>:<display name>`
-without checking them, and refuses to start that way when `NODE_ENV=production`. The seed creates a
+without checking them, and refuses to start that way when `ENV=production`. The seed creates a
 demo store manager, `dev:staff-demo`, which the dashboard uses. With `AUTH_MODE=firebase` and
 `FIREBASE_PROJECT_ID` set, the API verifies real Firebase ID tokens against Google's public keys.
 
@@ -65,20 +65,21 @@ Open http://localhost:3000/carts to watch the cart appear and its total update l
 
 ```sh
 pnpm typecheck
-pnpm test             # API integration tests run when DATABASE_URL and REDIS_URL are set
+pnpm test             # contracts, dashboard, mobile
+pnpm test:api         # API (pytest); integration tests run when DATABASE_URL and REDIS_URL are set
 pnpm --filter @smart-cart/mobile export:check   # Android and iOS bundles
 ```
 
 ## Demo data
 
-`apps/api/prisma/data/products.csv` holds 213 everyday products across 11 categories for one demo
+`apps/api/src/smartcart/data/products.csv` holds 213 everyday products across 11 categories for one demo
 store (`S-01`) with 20 carts (`C-0001` to `C-0020`). Fourteen start below their low-stock threshold
 so the dashboard has alerts to show.
 
 The barcodes are **synthetic**: they use the GS1 in-store prefix `20`, so they can never clash with
 a real product, but scanning a real pack will not find it. Print the codes, or replace the
 `barcode` column with codes read off real packs. GST rates and HSN codes are illustrative and must
-be checked before the pilot. Regenerate the file with `pnpm --filter @smart-cart/api seed:generate-catalog`.
+be checked before the pilot.
 
 ## V1 milestones
 

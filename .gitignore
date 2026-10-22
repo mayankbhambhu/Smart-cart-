@@ -18,3 +18,11 @@ infra/terraform/**/.terraform/
 infra/terraform/**/*.tfstate*
 infra/terraform/**/*.tfvars
 !infra/terraform/**/*.tfvars.example
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/

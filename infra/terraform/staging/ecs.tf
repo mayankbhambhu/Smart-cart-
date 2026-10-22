@@ -74,7 +74,7 @@ resource "aws_ecs_task_definition" "api" {
     essential    = true
     portMappings = [{ containerPort = 4000, protocol = "tcp" }]
     environment = [
-      { name = "NODE_ENV", value = "production" },
+      { name = "ENV", value = "production" },
       { name = "PORT", value = "4000" },
       { name = "REDIS_URL", value = "redis://${aws_elasticache_cluster.redis.cache_nodes[0].address}:6379" },
       { name = "CORS_ORIGINS", value = local.public_url },

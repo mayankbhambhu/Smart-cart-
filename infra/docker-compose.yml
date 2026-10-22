@@ -33,9 +33,11 @@ services:
       DATABASE_URL: postgresql://smartcart:smartcart@postgres:5432/smartcart?schema=public
       REDIS_URL: redis://redis:6379
       CORS_ORIGINS: http://localhost:3000
-      NODE_ENV: production
+      # The local stack has no Firebase project yet, so it runs with dev sign-in.
+      ENV: development
+      AUTH_MODE: dev
     # Applies migrations and the (idempotent) demo seed on start.
-    command: ["sh", "-c", "node_modules/.bin/prisma migrate deploy && node dist/prisma/seed.js && node dist/src/main.js"]
+    command: ["sh", "-c", "alembic upgrade head && python -m smartcart.seed && python -m smartcart.main"]
     ports: ["4000:4000"]
     depends_on:
       postgres: { condition: service_healthy }
