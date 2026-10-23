@@ -188,6 +188,7 @@ async def test_staff_check_exit_codes_once(api: Api, http: httpx.AsyncClient, mi
     assert (await http.post(url, json={"code": "ZZZZZZ"}, headers=staff)).json() == {
         "result": "not_found",
         "order": None,
+        "bagCheck": None,
     }
 
     orders = (await http.get(f"/admin/v1/stores/{STORE}/orders", headers=staff)).json()["orders"]

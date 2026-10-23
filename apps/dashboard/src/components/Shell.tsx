@@ -2,6 +2,7 @@
 
 import type { ReactNode } from "react";
 import { HelpAlerts } from "@/components/HelpAlerts";
+import { SecurityAlerts } from "@/components/SecurityAlerts";
 import { LiveStatus } from "@/components/LiveStatus";
 import { LowStockAlerts } from "@/components/LowStockAlerts";
 import { Nav } from "@/components/Nav";
@@ -60,6 +61,7 @@ export function Shell({ children }: { children: ReactNode }) {
         </div>
       </header>
       <main className="mx-auto max-w-6xl px-4 py-6">
+        <SecurityAlerts />
         <HelpAlerts />
         <LowStockAlerts />
         {children}

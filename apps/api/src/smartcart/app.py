@@ -16,14 +16,16 @@ from redis.asyncio import Redis
 from .assist_service import AssistService
 from .assistant import Assistant
 from .auth import DevTokenVerifier, FirebaseTokenVerifier, SessionTokenVerifier, TokenVerifier
+from .cart_guard import CartGuard
 from .cart_service import CartService
 from .checkout_service import CheckoutService
 from .config import Settings, get_settings
 from .db import make_engine, make_sessionmaker
 from .errors import ApiError
+from .hardening import RateLimiter, default_rules, init_error_tracking, request_context
 from .payments import make_provider
 from .realtime import Realtime
-from .routes import admin, assist, carts, catalog, health, offers, orders, staff
+from .routes import admin, analytics, assist, carts, catalog, health, offers, orders, security, staff
 from .staff_service import StaffService
 from .store_ops import StoreOps
 
@@ -54,6 +56,8 @@ def create_app(settings: Settings | None = None, *, run_sweeper: bool = True) ->
     assistant = Assistant(assist_service, settings.anthropic_api_key)
     staff_service = StaffService(settings.signing_secret, settings.sms_provider)
     ops = StoreOps(cart_service, realtime.publish)
+    guard = CartGuard(cart_service, realtime.publish, settings.device_secret)
+    checkout.bag_check = guard.bag_check
     realtime.attach(verifier, maker, cart_service)
 
     @contextlib.asynccontextmanager
@@ -90,7 +94,17 @@ def create_app(settings: Settings | None = None, *, run_sweeper: bool = True) ->
         await redis.aclose()
         await engine.dispose()
 
-    api = FastAPI(title="Smart Cart API", version="0.2.0", lifespan=lifespan)
+    version = "0.3.0"
+    if init_error_tracking(settings.sentry_dsn, settings.env, version):
+        log.info("error tracking on (Sentry)")
+    limiter = RateLimiter(
+        redis,
+        default_rules(settings.rate_limit_scale),
+        enabled=settings.rate_limits,
+        proxy_hops=settings.proxy_hops,
+    )
+
+    api = FastAPI(title="Smart Cart API", version=version, lifespan=lifespan)
     api.state.settings = settings
     api.state.sessionmaker = maker
     api.state.redis = redis
@@ -102,11 +116,20 @@ def create_app(settings: Settings | None = None, *, run_sweeper: bool = True) ->
     api.state.assistant = assistant
     api.state.staff = staff_service
     api.state.ops = ops
+    api.state.guard = guard
+    api.state.limiter = limiter
+
+    # Added first so CORS wraps it: a 429 still carries CORS headers and the browser can read it.
+    @api.middleware("http")
+    async def context(request: Request, call_next: Any) -> Any:
+        return await request_context(request, call_next, limiter)
+
     api.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origin_list,
         allow_methods=["*"],
         allow_headers=["*"],
+        expose_headers=["retry-after", "x-request-id"],
     )
 
     @api.exception_handler(ApiError)
@@ -129,6 +152,10 @@ def create_app(settings: Settings | None = None, *, run_sweeper: bool = True) ->
         assist.catalog_router,
         offers.router,
         offers.admin_router,
+        security.hw_router,
+        security.floor_router,
+        security.manager_router,
+        analytics.admin_router,
         staff.auth_router,
         staff.shopper_router,
         staff.floor_router,

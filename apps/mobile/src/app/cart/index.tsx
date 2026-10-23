@@ -7,6 +7,7 @@ import { DealAlert } from "../../components/DealAlert";
 import { Button } from "../../components/Button";
 import { FindItFast } from "../../components/FindItFast";
 import { HelpBanner } from "../../components/HelpBanner";
+import { WeightBanner } from "../../components/WeightBanner";
 import { useCart } from "../../lib/cart-store";
 import { formatInr, formatRate } from "../../lib/money";
 import { colors } from "../../lib/theme";
@@ -71,6 +72,7 @@ export default function LiveCartScreen() {
         contentContainerStyle={cart.lines.length === 0 ? styles.emptyList : { paddingBottom: 16 }}
         ListHeaderComponent={
           <View style={styles.tools}>
+            <WeightBanner />
             <DealAlert />
             <FindItFast />
             <HelpBanner compact />

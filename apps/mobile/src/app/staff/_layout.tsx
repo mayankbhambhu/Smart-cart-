@@ -10,6 +10,7 @@ export default function StaffLayout() {
     <Stack screenOptions={{ headerTintColor: colors.brand, contentStyle: { backgroundColor: colors.background } }}>
       <Stack.Screen name="index" options={{ title: "Staff mode" }} />
       <Stack.Screen name="help" options={{ title: "Help requests" }} />
+      <Stack.Screen name="security" options={{ title: "Carts to check" }} />
       <Stack.Screen name="picklist" options={{ title: "Pick list" }} />
       <Stack.Screen name="tasks" options={{ title: "Tasks" }} />
       <Stack.Screen name="stock" options={{ title: "Stock check" }} />

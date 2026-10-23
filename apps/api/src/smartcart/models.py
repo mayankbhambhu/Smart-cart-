@@ -663,3 +663,48 @@ class Offer(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=False), default=utcnow, server_default=text("CURRENT_TIMESTAMP")
     )
+
+
+class CartTelemetry(Base):
+    """The latest reading from a cart's hardware: battery, the load cell under the basket, the aisle
+    beacon it last heard, and any faults it reports. One row per cart, overwritten on every reading.
+    In V1 a simulator (smartcart.cart_sim) stands in for the hardware."""
+
+    __tablename__ = "cart_telemetry"
+    cart_id: Mapped[str] = mapped_column(
+        ForeignKey("carts.id", onupdate="CASCADE", ondelete="CASCADE"), primary_key=True
+    )
+    battery_pct: Mapped[int] = mapped_column(Integer)
+    weight_g: Mapped[int] = mapped_column(Integer)
+    aisle: Mapped[str | None]
+    faults: Mapped[list[str]] = mapped_column(ARRAY(Text), server_default="{}", default=list)
+    seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=False), default=utcnow)
+    # When the basket's weight stopped matching the scanned items, while it still doesn't.
+    mismatch_since: Mapped[datetime | None] = mapped_column(DateTime(timezone=False))
+
+
+class SecurityAlert(Base):
+    """Something for the floor to check: weight in a cart that was never scanned, or a cart going
+    through the exit gate without paying. Staff decide what happened; the system only points."""
+
+    __tablename__ = "security_alerts"
+    __table_args__ = (Index("security_alerts_store_status_idx", "store_id", "status"),)
+    id: Mapped[str] = mapped_column(primary_key=True, default=new_id)
+    store_id: Mapped[str] = mapped_column(ForeignKey("stores.id", onupdate="CASCADE", ondelete="RESTRICT"))
+    cart_id: Mapped[str] = mapped_column(ForeignKey("carts.id", onupdate="CASCADE", ondelete="RESTRICT"))
+    session_id: Mapped[str | None] = mapped_column(
+        ForeignKey("cart_sessions.id", onupdate="CASCADE", ondelete="SET NULL")
+    )
+    kind: Mapped[str]  # unscanned_item | exit_unpaid
+    aisle: Mapped[str | None]
+    details: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    # open | acknowledged | resolved | false_alarm | cleared (the cart matched again by itself)
+    status: Mapped[str] = mapped_column(server_default="open", default="open")
+    note: Mapped[str | None]
+    handled_by: Mapped[str | None] = mapped_column(
+        ForeignKey("users.id", onupdate="CASCADE", ondelete="SET NULL")
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=False), default=utcnow, server_default=text("CURRENT_TIMESTAMP")
+    )
+    closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=False))

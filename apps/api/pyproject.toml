@@ -18,6 +18,8 @@ dependencies = [
     "stripe>=16.0.0",
     "anthropic>=2.1.0",
     "argon2-cffi>=25.1.0",
+    "httpx>=0.28",
+    "sentry-sdk[fastapi]>=2",
 ]
 
 [dependency-groups]

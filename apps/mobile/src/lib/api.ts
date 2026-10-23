@@ -23,6 +23,8 @@ import type {
   SearchResponse,
   OffersResponse,
   SearchSource,
+  SecurityAlert,
+  SecurityAlertsResponse,
 } from "@smart-cart/contracts";
 import { API_URL, DEMO } from "./config";
 
@@ -207,4 +209,8 @@ export const staffApi = {
     }),
   exitCheck: (storeId: string, code: string) =>
     request<ExitCheckResponse>("POST", `/staff/v1/stores/${storeId}/exit-checks`, { code }),
+  security: (storeId: string) =>
+    request<SecurityAlertsResponse>("GET", `/staff/v1/stores/${storeId}/security-alerts`).then((r) => r.alerts),
+  securityAction: (storeId: string, id: string, action: "acknowledge" | "resolve" | "false_alarm") =>
+    request<SecurityAlert>("POST", `/staff/v1/stores/${storeId}/security-alerts/${id}`, { action }),
 };

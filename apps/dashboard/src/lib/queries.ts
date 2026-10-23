@@ -1,4 +1,4 @@
-import type { StoreOffer } from "@smart-cart/contracts";
+import type { FleetCart, SecurityAlert, StoreOffer } from "@smart-cart/contracts";
 import type { Reservation, StaffAccount, StaffRequest, StaffRequestStatus, StaffTask, StockCorrection } from "@smart-cart/contracts";
 import { apiGet, STORE_ID } from "./api";
 
@@ -41,4 +41,16 @@ export const correctionsQuery = (days: number) => ({
 export const offersQuery = () => ({
   queryKey: ["offers", STORE_ID],
   queryFn: () => apiGet<{ offers: StoreOffer[] }>(`${store}/offers`).then((r) => r.offers),
+});
+
+/** Carts to check: open ones for the nav badge and alert bar, or the last day's for the Security page. */
+export const securityQuery = (openOnly: boolean) => ({
+  queryKey: ["security", STORE_ID, openOnly ? "open" : "day"],
+  queryFn: () =>
+    apiGet<{ alerts: SecurityAlert[] }>(`${store}/security-alerts?openOnly=${openOnly}`).then((r) => r.alerts),
+});
+
+export const fleetQuery = () => ({
+  queryKey: ["fleet", STORE_ID],
+  queryFn: () => apiGet<{ carts: FleetCart[] }>(`${store}/fleet`).then((r) => r.carts),
 });

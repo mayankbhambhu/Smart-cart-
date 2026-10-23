@@ -2,6 +2,7 @@
 
 import type { ExitCheckResponse } from "@smart-cart/contracts";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import Link from "next/link";
 import { useEffect, useState, type FormEvent } from "react";
 import { apiGet, apiPost, DEMO, formatInr, STORE_ID, type OrderRow } from "@/lib/api";
 
@@ -162,13 +163,26 @@ function ExitCheck() {
       {failed && <p className="text-sm text-red-700">Could not check the code. Try again.</p>}
       {r && result && (
         <div className={`rounded-md border px-3 py-2 text-sm ${r.className}`} role="status">
-          <p className="font-medium">{r.title}</p>
+          <p className="font-medium">{result.bagCheck ? "Paid. Check the bag before they leave." : r.title}</p>
           {result.order && (
             <p>
               Cart {result.order.cartCode} · {result.order.totals.itemCount} items · {formatInr(result.order.totals.totalPaise)}
               {result.order.exitUsedAt && result.result === "already_used" ? ` · first used at ${time(result.order.exitUsedAt)}` : ""}
             </p>
           )}
+        </div>
+      )}
+      {result?.bagCheck && (
+        <div className="space-y-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-950" role="alert">
+          <p className="font-medium">Why</p>
+          <p>{result.bagCheck.reason}</p>
+          <p className="text-xs text-amber-900">
+            Ask politely; it is usually a shopper's own item or a scale that needs recalibrating. Close the alert on the{" "}
+            <Link href="/security" className="underline">
+              Security
+            </Link>{" "}
+            page once done.
+          </p>
         </div>
       )}
     </div>

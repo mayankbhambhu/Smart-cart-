@@ -173,3 +173,37 @@ async def test_deals_match_the_contract(http: httpx.AsyncClient) -> None:
         "OfferCreateRequest",
         {"productId": "p1", "title": "Deal", "offerPricePaise": 100, "endsAt": "2026-10-30T18:30:00+05:30"},
     )
+
+
+@pytest.mark.integration
+async def test_security_and_fleet_match_the_contract(
+    api: Api, server: Server, http: httpx.AsyncClient, milk: Item
+) -> None:
+    auth = shopper()
+    session_id = await api.session(auth)
+    cart = str((await api.snapshot(auth, session_id))["cartCode"])
+    await api.add(auth, session_id, milk.code, 1)
+    reading = {"batteryPct": 64, "weightG": 515 + 400, "aisle": "B2", "faults": ["lid_open"]}
+    check("TelemetryRequest", reading)
+    key = {"x-device-key": server.guard.device_key(f"cart:{cart}")}
+    async with connected(server, auth) as phone, connected(server, STAFF) as staff:
+        await phone.join(room="cart", sessionId=session_id)
+        await staff.join(room="store", storeId="S-01")
+        await http.post(f"/hw/v1/carts/{cart}/telemetry", json=reading, headers=key)
+        check("SmartCartEvent", await phone.next("cart.weight_check"))
+        gate = {"x-device-key": server.guard.device_key("gate:S-01:G2")}
+        await http.post("/hw/v1/stores/S-01/gates/G2/pass", json={"cartId": cart}, headers=gate)
+        alert = await staff.next("security.alert")
+        check("SmartCartEvent", alert)
+        await http.post(
+            f"/admin/v1/stores/S-01/security-alerts/{alert['data']['id']}",
+            headers={"authorization": STAFF},
+            json={"action": "false_alarm", "note": "Shopper went back in"},
+        )
+        check("SmartCartEvent", await staff.next("security.updated"))
+    admin = {"authorization": STAFF}
+    check(
+        "SecurityAlertsResponse",
+        (await http.get("/admin/v1/stores/S-01/security-alerts", headers=admin)).json(),
+    )
+    check("FleetResponse", (await http.get("/admin/v1/stores/S-01/fleet", headers=admin)).json())

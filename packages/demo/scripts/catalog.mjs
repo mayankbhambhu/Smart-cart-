@@ -22,6 +22,7 @@ const products = csv.slice(1).map((line, i) => {
     section: sectionOf.get(r.category).name,
     foodType: r.food_type || null,
     gstRateBp: Number(r.gst_rate_bp),
+    weightG: r.weight_g ? Number(r.weight_g) : null,
     pricePaise: Number(r.price_paise),
     mrpPaise: Number(r.mrp_paise),
     dietTags: (r.diet || "").split(";").filter(Boolean),

@@ -9,6 +9,7 @@ payment still in flight.
 
 import logging
 import secrets
+from collections.abc import Awaitable, Callable
 from datetime import timedelta
 from typing import Any
 from urllib.parse import parse_qs, urlparse
@@ -42,6 +43,7 @@ from .models import (
 )
 from .payments import PaymentError, PaymentProvider, PaymentUpdate
 from .schemas import (
+    BagCheck,
     CartLine,
     CartTotals,
     CheckoutResponse,
@@ -88,6 +90,8 @@ class CheckoutService:
         self.carts = carts
         self.provider = provider
         self.publish = publish
+        # Set by the app to the anti-theft check (cart_guard.CartGuard.bag_check).
+        self.bag_check: Callable[[AsyncSession, str], Awaitable[dict[str, Any] | None]] | None = None
 
     # --- shopper ---
 
@@ -456,11 +460,15 @@ class CheckoutService:
             return ExitCheckResponse(result="not_found", order=None)
         if order.status != OrderStatus.paid:
             return ExitCheckResponse(result="not_paid", order=await self.receipt(db, order))
+        check = await self.bag_check(db, order.session_id) if self.bag_check else None
+        bag = BagCheck(alert_id=check["alertId"], reason=check["reason"]) if check else None
         if order.exit_used_at is not None:
-            return ExitCheckResponse(result="already_used", order=await self.receipt(db, order))
+            return ExitCheckResponse(
+                result="already_used", order=await self.receipt(db, order), bag_check=bag
+            )
         order.exit_used_at = utcnow()
         await db.commit()
-        return ExitCheckResponse(result="ok", order=await self.receipt(db, order))
+        return ExitCheckResponse(result="ok", order=await self.receipt(db, order), bag_check=bag)
 
     def _intent(self, payment_id: str | None, client_secret: str | None) -> PaymentIntentOut:
         return PaymentIntentOut(

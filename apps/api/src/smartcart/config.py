@@ -14,6 +14,17 @@ class Settings(BaseSettings):
     port: int = 4000
     host: str = "0.0.0.0"
     log_level: str = "info"
+    # json: one JSON object per log line, with the request id (production). text: for a terminal.
+    log_format: Literal["text", "json"] = "text"
+    # Unhandled errors go to Sentry when set. Optional; no personal data is sent.
+    sentry_dsn: str | None = None
+    # Per-caller limits on sign-in, the assistant, search, help and cart hardware (hardening.py).
+    rate_limits: bool = True
+    # Multiplies every limit, e.g. 2 for a busy launch day.
+    rate_limit_scale: float = 1.0
+    # Load balancers in front of the API, so the caller's address is read from X-Forwarded-For.
+    # 1 behind an AWS ALB; 0 when clients connect directly.
+    proxy_hops: int = 0
     database_url: str = "postgresql://smartcart:smartcart@localhost:5432/smartcart"
     redis_url: str = "redis://localhost:6379"
     # Comma-separated list of origins allowed to call the API from a browser.
@@ -39,6 +50,9 @@ class Settings(BaseSettings):
     # How staff get their temporary password by SMS. "log" writes it to the API log and returns it to
     # the approving admin, for development and demos only; a real SMS provider is still to be chosen.
     sms_provider: Literal["log"] = "log"
+    # Carts and exit gates sign their readings with a key derived from this (see cart_guard). At least
+    # 32 random characters from the environment in production; a fixed dev value is used otherwise.
+    cart_device_secret: str | None = None
     # Use the Socket.IO Redis manager so any API instance can deliver to any room.
     realtime_redis: bool = True
 
@@ -57,6 +71,8 @@ class Settings(BaseSettings):
             )
         if self.env == "production" and (not self.session_secret or len(self.session_secret) < 32):
             raise ValueError("SESSION_SECRET (32+ characters) is required in production")
+        if self.env == "production" and (not self.cart_device_secret or len(self.cart_device_secret) < 32):
+            raise ValueError("CART_DEVICE_SECRET (32+ characters) is required in production")
         if self.env == "production" and self.payment_provider == "fake":
             raise ValueError("PAYMENT_PROVIDER=fake is not allowed in production")
         if self.env == "production" and self.sms_provider == "log":
@@ -75,6 +91,10 @@ class Settings(BaseSettings):
     @property
     def signing_secret(self) -> str:
         return self.session_secret or "dev-only-session-secret-not-for-production"
+
+    @property
+    def device_secret(self) -> str:
+        return self.cart_device_secret or "dev-only-cart-device-secret-not-for-production"
 
     @property
     def cors_origin_list(self) -> list[str]:

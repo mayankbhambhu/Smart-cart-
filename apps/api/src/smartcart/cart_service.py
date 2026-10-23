@@ -350,6 +350,10 @@ class CartService:
 
     # --- internals ---
 
+    async def quantities(self, db: AsyncSession, session: CartSession) -> dict[str, int]:
+        """productId -> qty in the cart now (for the weight check)."""
+        return await self._quantities(db, session)
+
     async def _quantities(self, db: AsyncSession, session: CartSession) -> dict[str, int]:
         """productId -> qty from Redis, rebuilt from cart_events if the hash is missing."""
         key = items_key(session.id)

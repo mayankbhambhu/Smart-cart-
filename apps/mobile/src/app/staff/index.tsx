@@ -15,12 +15,15 @@ export default function StaffHome() {
   const help = useQuery({ queryKey: ["staff-help", storeId], queryFn: () => staffApi.help(storeId), refetchInterval: STAFF_POLL_MS });
   const picks = useQuery({ queryKey: ["picklist", storeId], queryFn: () => staffApi.pickList(storeId), refetchInterval: STAFF_POLL_MS });
   const tasks = useQuery({ queryKey: ["staff-tasks", storeId], queryFn: () => staffApi.tasks(storeId), refetchInterval: STAFF_POLL_MS });
+  const security = useQuery({ queryKey: ["staff-security", storeId], queryFn: () => staffApi.security(storeId), refetchInterval: STAFF_POLL_MS });
 
   const waiting = help.data?.filter((h) => h.status === "open").length ?? 0;
   const toPick = picks.data?.filter((r) => r.status === "reserved").length ?? 0;
   const openTasks = tasks.data?.filter((t) => t.type !== "pick").length ?? 0;
+  const toCheck = security.data?.filter((a) => a.status === "open").length ?? 0;
   const tiles: { href: Href; icon: string; title: string; sub: string; count?: number; urgent?: boolean }[] = [
     { href: "/staff/help", icon: "🙋", title: "Help requests", sub: waiting ? `${waiting} waiting` : "Nobody waiting", count: waiting, urgent: waiting > 0 },
+    { href: "/staff/security", icon: "🛡️", title: "Carts to check", sub: toCheck ? `${toCheck} to check` : "All clear", count: toCheck, urgent: toCheck > 0 },
     { href: "/staff/picklist", icon: "🧺", title: "Pick list", sub: toPick ? `${toPick} to pick` : "All picked", count: toPick },
     { href: "/staff/tasks", icon: "📦", title: "Tasks", sub: openTasks ? `${openTasks} open` : "Nothing open", count: openTasks },
     { href: "/staff/stock", icon: "🔢", title: "Stock check", sub: "Count and correct a shelf" },
