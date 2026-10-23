@@ -22,6 +22,7 @@ from .checkout_service import CheckoutService
 from .config import Settings, get_settings
 from .db import make_engine, make_sessionmaker
 from .errors import ApiError
+from .hardening import RateLimiter, default_rules, init_error_tracking, request_context
 from .payments import make_provider
 from .realtime import Realtime
 from .routes import admin, analytics, assist, carts, catalog, health, offers, orders, security, staff
@@ -93,7 +94,17 @@ def create_app(settings: Settings | None = None, *, run_sweeper: bool = True) ->
         await redis.aclose()
         await engine.dispose()
 
-    api = FastAPI(title="Smart Cart API", version="0.2.0", lifespan=lifespan)
+    version = "0.3.0"
+    if init_error_tracking(settings.sentry_dsn, settings.env, version):
+        log.info("error tracking on (Sentry)")
+    limiter = RateLimiter(
+        redis,
+        default_rules(settings.rate_limit_scale),
+        enabled=settings.rate_limits,
+        proxy_hops=settings.proxy_hops,
+    )
+
+    api = FastAPI(title="Smart Cart API", version=version, lifespan=lifespan)
     api.state.settings = settings
     api.state.sessionmaker = maker
     api.state.redis = redis
@@ -106,11 +117,19 @@ def create_app(settings: Settings | None = None, *, run_sweeper: bool = True) ->
     api.state.staff = staff_service
     api.state.ops = ops
     api.state.guard = guard
+    api.state.limiter = limiter
+
+    # Added first so CORS wraps it: a 429 still carries CORS headers and the browser can read it.
+    @api.middleware("http")
+    async def context(request: Request, call_next: Any) -> Any:
+        return await request_context(request, call_next, limiter)
+
     api.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origin_list,
         allow_methods=["*"],
         allow_headers=["*"],
+        expose_headers=["retry-after", "x-request-id"],
     )
 
     @api.exception_handler(ApiError)

@@ -14,6 +14,17 @@ class Settings(BaseSettings):
     port: int = 4000
     host: str = "0.0.0.0"
     log_level: str = "info"
+    # json: one JSON object per log line, with the request id (production). text: for a terminal.
+    log_format: Literal["text", "json"] = "text"
+    # Unhandled errors go to Sentry when set. Optional; no personal data is sent.
+    sentry_dsn: str | None = None
+    # Per-caller limits on sign-in, the assistant, search, help and cart hardware (hardening.py).
+    rate_limits: bool = True
+    # Multiplies every limit, e.g. 2 for a busy launch day.
+    rate_limit_scale: float = 1.0
+    # Load balancers in front of the API, so the caller's address is read from X-Forwarded-For.
+    # 1 behind an AWS ALB; 0 when clients connect directly.
+    proxy_hops: int = 0
     database_url: str = "postgresql://smartcart:smartcart@localhost:5432/smartcart"
     redis_url: str = "redis://localhost:6379"
     # Comma-separated list of origins allowed to call the API from a browser.

@@ -1,14 +1,13 @@
 """Entry point: `python -m smartcart.main` (or `uvicorn smartcart.main:app`)."""
 
-import logging
-
 import uvicorn
 
 from .app import create_app
 from .config import get_settings
+from .hardening import configure_logging
 
 settings = get_settings()
-logging.basicConfig(level=settings.log_level.upper(), format="%(asctime)s %(levelname)s %(name)s %(message)s")
+configure_logging(settings.log_level, settings.log_format)
 app = create_app(settings)
 
 if __name__ == "__main__":
