@@ -80,6 +80,7 @@ function AddSheet({
   const [qty, setQty] = useState(1);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const retrying = useCart((s) => s.retrying);
   // Kept for this preview so a retry after a network error is applied once by the server.
   const requestId = useRef(Crypto.randomUUID()).current;
 
@@ -101,7 +102,13 @@ function AddSheet({
       onClose(product.name);
     } catch (e) {
       setBusy(false);
-      setError(e instanceof ApiError && e.code === "session_not_active" ? "This cart is no longer open." : "Could not add the item. Try again.");
+      setError(
+        e instanceof ApiError && e.code === "session_not_active"
+          ? "This cart is no longer open."
+          : e instanceof ApiError && e.status === 0
+            ? "No signal here, so it wasn't added. Tap Add to cart again in a moment; it won't be added twice."
+            : "Could not add the item. Try again.",
+      );
     }
   };
 
@@ -126,6 +133,7 @@ function AddSheet({
             <Text style={styles.stepText}>+</Text>
           </Pressable>
         </View>
+        {busy && retrying && <Text style={styles.retrying}>Weak signal. Still trying to add it…</Text>}
         {error && <Text style={styles.error}>{error}</Text>}
         <Button title="Add to cart" onPress={confirm} busy={busy} />
         <Pressable accessibilityRole="button" onPress={() => onClose()} style={styles.notThis}>
@@ -153,6 +161,7 @@ const styles = StyleSheet.create({
   stepText: { fontSize: 22, color: colors.text },
   qty: { fontSize: 24, fontWeight: "600", minWidth: 32, textAlign: "center" },
   error: { color: colors.danger },
+  retrying: { color: "#92400E", textAlign: "center" },
   notThis: { alignSelf: "center", padding: 8 },
   notThisText: { color: colors.muted },
 });

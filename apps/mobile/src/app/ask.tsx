@@ -1,5 +1,6 @@
 import { useRef, useState } from "react";
 import { FlatList, KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { ApiError } from "../lib/api";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { HelpBanner } from "../components/HelpBanner";
 import { whereLabel } from "../lib/assist-logic";
@@ -14,7 +15,7 @@ export default function AskScreen() {
   const { chat, ask } = useAssist();
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
-  const [failed, setFailed] = useState(false);
+  const [failed, setFailed] = useState<string | null>(null);
   const list = useRef<FlatList<ChatMessage>>(null);
   const insets = useSafeAreaInsets();
 
@@ -23,11 +24,15 @@ export default function AskScreen() {
     if (!m || busy) return;
     setText("");
     setBusy(true);
-    setFailed(false);
+    setFailed(null);
     try {
       await ask(m);
-    } catch {
-      setFailed(true);
+    } catch (e) {
+      setFailed(
+        e instanceof ApiError && e.code === "rate_limited"
+          ? "That's a lot of questions at once. Wait a few seconds and ask again."
+          : "Couldn't reach the store. Try again.",
+      );
     } finally {
       setBusy(false);
     }
@@ -62,7 +67,7 @@ export default function AskScreen() {
         ListFooterComponent={
           <View style={{ gap: 8 }}>
             {busy && <Text style={styles.muted}>Checking the store…</Text>}
-            {failed && <Text style={{ color: colors.danger }}>Couldn't reach the store. Try again.</Text>}
+            {failed && <Text style={{ color: colors.danger }}>{failed}</Text>}
           </View>
         }
       />

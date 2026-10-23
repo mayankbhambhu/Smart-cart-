@@ -1,4 +1,5 @@
 import type { SmartCartEvent } from "@smart-cart/contracts";
+import { AppState } from "react-native";
 import { io, type Socket } from "socket.io-client";
 import { API_URL, DEMO } from "./config";
 import { demo } from "./demo";
@@ -15,14 +16,30 @@ export function connectCart(opts: {
   onLive: (live: boolean) => void;
 }): () => void {
   if (DEMO) return demo().connect(opts.sessionId, opts.onEvent, opts.onLive);
-  const socket: Socket = io(API_URL, { auth: { token: opts.token }, transports: ["websocket"] });
+  const socket: Socket = io(API_URL, {
+    auth: { token: opts.token },
+    transports: ["websocket"],
+    // Keep trying for as long as the cart is open, backing off to every 10 s with some jitter so a
+    // whole store's phones don't reconnect at the same instant after the Wi-Fi blips.
+    reconnection: true,
+    reconnectionAttempts: Infinity,
+    reconnectionDelay: 1_000,
+    reconnectionDelayMax: 10_000,
+    randomizationFactor: 0.5,
+  });
   socket.on("connect", () => {
     socket.emit("join", { room: "cart", sessionId: opts.sessionId }, (res: { ok: boolean }) => opts.onLive(res.ok));
   });
   socket.on("disconnect", () => opts.onLive(false));
   socket.on("connect_error", () => opts.onLive(false));
   socket.on("event", opts.onEvent);
+  // Phones drop sockets while the app is in the background; reconnect as soon as it's back, without
+  // waiting for the next backoff step. The join on connect brings a fresh snapshot.
+  const foreground = AppState.addEventListener("change", (state) => {
+    if (state === "active" && !socket.connected) socket.connect();
+  });
   return () => {
+    foreground.remove();
     socket.removeAllListeners();
     socket.disconnect();
   };

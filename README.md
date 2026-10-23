@@ -156,6 +156,63 @@ what's already in the cart); the **Deals** screen lists them all and turns the a
 sets or changes an offer on its own. The seed starts eight week-long demo offers
 (`data/offers.csv`).
 
+## Anti-theft and the cart fleet
+
+Each cart weighs its basket and compares it with the pack weights of what was scanned (allowing
+the larger of 120 g or 6% for scale drift; a product without a weight means no check). When the
+basket is heavier, the shopper's app says so first and offers to scan it or call for help. Only if
+it still doesn't match after 45 seconds does the store team get an alert, on the dashboard's
+**Security** page and under **Carts to check** in staff mode. It clears by itself once the cart
+matches again. A cart passing the exit gate before paying raises an alert once. While an alert is
+open, the exit check asks staff to check the bag against the receipt. Alerts ask staff to check;
+they never say a shopper stole anything, and staff decide what happened (checked, or false alarm).
+
+The **Cart fleet** page shows every cart's battery, aisle, faults and last check-in, and takes a
+free cart out of service (shoppers can't pair it until it's back).
+
+Until the hardware exists, `cart_sim` plays a cart, signing its readings like the real one would:
+
+```sh
+cd apps/api
+uv run python -m smartcart.cart_sim C-0007                 # matching readings every 5 s
+uv run python -m smartcart.cart_sim C-0007 --extra 450     # 450 g that was never scanned
+uv run python -m smartcart.cart_sim C-0007 --gate G1       # the cart passes exit gate G1
+```
+
+In the web demos, use **Put an item in unscanned** and **Cart at exit unpaid** on the dashboard,
+or **Demo: put an item in without scanning** on the app's cart screen (staff are told after 12
+seconds there, so you don't wait).
+
+## Store analytics
+
+`GET /admin/v1/stores/{id}/analytics?days=7` (the dashboard's **Analytics** page) is computed in
+Python (`apps/api/src/smartcart/analytics.py`) from what the store recorded: orders and sales by
+IST hour and day, basket size and items, time from pairing to paying, top products, sales by
+section, deal uplift (units a day during each offer against the same number of days before it),
+the share of searches spoken, the busiest aisles by scans and help, and how cart alerts ended.
+Where there isn't enough data (an offer less than a day old, or under five sales before it), it
+says so instead of estimating.
+
+For a demo with history, add two weeks of sample trading (never on a live store):
+
+```sh
+cd apps/api && uv run python -m smartcart.seed_history --days 14
+```
+
+## Running the pilot safely
+
+- **Rate limits** (Redis, per caller per minute): staff sign-in 10 per address, the assistant 20,
+  search 120, help requests 10, cart hardware 240 per device. Over the limit the API answers 429
+  with `Retry-After`. `RATE_LIMIT_SCALE` raises them all; set `PROXY_HOPS=1` behind a load balancer.
+- **Request ids**: every response carries `X-Request-ID`; with `LOG_FORMAT=json` each log line
+  includes it, so a shopper's problem can be traced from the app to the logs.
+- **Error tracking**: set `SENTRY_DSN` to send unhandled errors to Sentry, without request bodies,
+  cookies or credentials.
+- **Phones on store Wi-Fi**: the app reconnects its live cart with backoff and as soon as it comes
+  back to the foreground (the cart resyncs on join), and retries a scan or removal through a dropped
+  connection with the same request id, so it is applied once.
+- **Usability test**: [docs/pilot/usability-test.md](docs/pilot/usability-test.md).
+
 ## Tests
 
 ```sh
@@ -203,6 +260,11 @@ be checked before the pilot.
 6. **Voice search and aisle deals**: search by voice in English or Hindi with the answer read
    aloud (US-02); managers' offers with aisle deal alerts and a Deals screen (US-08); spoken
    searches in Reports.
-7. Pilot hardening: reconnects, idempotency, rate limits, Sentry, a 20-shopper usability test.
+7. **Anti-theft, cart fleet, analytics and hardening**: the cart's weight check with a nudge to
+   the shopper first and a staff alert only if it lasts, exit-gate alerts, a bag check at the exit
+   check, and the Security and Cart fleet pages (staff mode gets Carts to check); store analytics
+   computed in Python with the dashboard's Analytics page; rate limits, request ids, JSON logs,
+   optional Sentry, socket reconnects and scan retries in the app, and a 20-shopper usability test
+   kit ([docs/pilot/usability-test.md](docs/pilot/usability-test.md)).
 
 Deploying staging: [docs/deploy-staging.md](docs/deploy-staging.md).

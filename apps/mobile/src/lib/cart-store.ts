@@ -6,6 +6,7 @@ import { tokenFor, useAuth } from "./auth-store";
 import { useAssist } from "./assist-store";
 import { applyEvent, withLine } from "./cart-logic";
 import { connectCart } from "./realtime";
+import { withRetry } from "./retry";
 
 type CartState = {
   /** Null when the shopper has no open cart. */
@@ -16,6 +17,8 @@ type CartState = {
   endedReason: string | null;
   /** The order paid for most recently, so the app can show its receipt. */
   paidOrderId: string | null;
+  /** True while a scan or removal is being retried because the connection dropped. */
+  retrying: boolean;
   /** The cart's last weight check, when it doesn't match what was scanned. Null while it matches. */
   weight: { status: Exclude<WeightCheckStatus, "ok" | "unknown">; diffG: number | null } | null;
 
@@ -80,10 +83,20 @@ export const useCart = create<CartState>((set, get) => {
     if (cart) set({ cart: withLine(cart, productId, change.line, change.totals) });
   };
 
+  /** Retries through a dropped connection, with the caller's requestId, so each change applies once. */
+  const resilient = async <T,>(fn: () => Promise<T>): Promise<T> => {
+    try {
+      return await withRetry(fn, { onRetry: () => set({ retrying: true }) });
+    } finally {
+      set({ retrying: false });
+    }
+  };
+
   const remove = async (productId: string, qty: 1 | "all") => {
     const cart = get().cart;
     if (!cart) return;
-    applyChange(productId, await api.removeItem(cart.sessionId, productId, qty, Crypto.randomUUID()));
+    const requestId = Crypto.randomUUID();
+    applyChange(productId, await resilient(() => api.removeItem(cart.sessionId, productId, qty, requestId)));
   };
 
   return {
@@ -92,6 +105,7 @@ export const useCart = create<CartState>((set, get) => {
     endedReason: null,
     paidOrderId: null,
     weight: null,
+    retrying: false,
 
     resume: async () => {
       const cart = await api.myCart();
@@ -104,7 +118,7 @@ export const useCart = create<CartState>((set, get) => {
     add: async (barcode, qty, requestId) => {
       const cart = get().cart;
       if (!cart) throw new Error("no open cart");
-      const change = await api.addItem(cart.sessionId, barcode, qty, requestId);
+      const change = await resilient(() => api.addItem(cart.sessionId, barcode, qty, requestId));
       if (change.line) applyChange(change.line.productId, change);
       return change;
     },
