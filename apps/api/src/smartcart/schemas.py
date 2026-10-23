@@ -260,3 +260,13 @@ class ProductLabelRequest(Wire):
 
     def wire(self) -> dict[str, Any]:
         return self.model_dump(by_alias=True, mode="json", exclude_unset=True)
+
+
+class OfferCreateRequest(Wire):
+    """A manager's aisle deal (US-08). starts_at defaults to now; the window is at most 31 days."""
+
+    product_id: str = Field(min_length=1, max_length=40)
+    title: str = Field(min_length=3, max_length=80)
+    offer_price_paise: int = Field(gt=0)
+    starts_at: datetime | None = None
+    ends_at: datetime

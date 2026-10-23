@@ -12,6 +12,7 @@ const links: { href: string; label: string; admin?: boolean }[] = [
   { href: "/carts", label: "Active carts" },
   { href: "/orders", label: "Orders" },
   { href: "/reservations", label: "Reservations" },
+  { href: "/offers", label: "Offers" },
   { href: "/help", label: "Help" },
   { href: "/tasks", label: "Staff and tasks" },
   { href: "/insights", label: "Reports" },

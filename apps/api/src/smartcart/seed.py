@@ -1,4 +1,5 @@
-"""Seeds one demo store, its carts, and the product catalogue from data/products.csv.
+"""Seeds one demo store, its carts, the product catalogue from data/products.csv and a few week-long
+demo offers from data/offers.csv.
 
 Safe to run more than once: everything is upserted by its natural key.
 Run with `python -m smartcart.seed` (after `alembic upgrade head`).
@@ -6,6 +7,7 @@ Run with `python -m smartcart.seed` (after `alembic upgrade head`).
 
 import asyncio
 import csv
+from datetime import timedelta
 from pathlib import Path
 
 from sqlalchemy import select
@@ -20,6 +22,7 @@ from .models import (
     Category,
     FoodType,
     Inventory,
+    Offer,
     Product,
     Section,
     Staff,
@@ -27,12 +30,14 @@ from .models import (
     Store,
     StorePrice,
     User,
+    utcnow,
 )
 from .taxonomy import SECTIONS, category_id
 
 STORE_ID = "S-01"
 CART_COUNT = 20
 CSV_PATH = Path(__file__).parent / "data" / "products.csv"
+OFFERS_PATH = Path(__file__).parent / "data" / "offers.csv"
 
 
 def is_valid_ean13(code: str) -> bool:
@@ -153,8 +158,37 @@ async def seed(db: AsyncSession) -> int:
         elif not existing.staff_code:
             existing.staff_code, existing.full_name = code, name
 
+    await seed_offers(db)
     await db.commit()
     return len(rows)
+
+
+async def seed_offers(db: AsyncSession) -> None:
+    """Demo aisle deals (US-08), so the app has something to announce. A product that already has an
+    offer running or scheduled is left alone, so re-seeding never stacks or extends them."""
+    now = utcnow()
+    with OFFERS_PATH.open(newline="", encoding="utf-8") as f:
+        for r in csv.DictReader(f):
+            barcode = await db.get_one(Barcode, r["barcode"])
+            running = await db.scalar(
+                select(Offer.id).where(
+                    Offer.store_id == STORE_ID,
+                    Offer.product_id == barcode.product_id,
+                    Offer.ended_at.is_(None),
+                    Offer.ends_at > now,
+                )
+            )
+            if not running:
+                db.add(
+                    Offer(
+                        store_id=STORE_ID,
+                        product_id=barcode.product_id,
+                        title=r["title"],
+                        offer_price_paise=int(r["offer_price_paise"]),
+                        starts_at=now,
+                        ends_at=now + timedelta(days=int(r["days"])),
+                    )
+                )
 
 
 async def main() -> None:

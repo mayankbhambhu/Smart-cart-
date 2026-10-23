@@ -30,12 +30,17 @@ export function ProductResult({ product, badge, children }: { product: SearchRes
       <View style={styles.top}>
         <View style={{ flex: 1 }}>
           {badge && <Text style={styles.badge}>{badge}</Text>}
+          {product.offer && <Text style={styles.offer}>🏷️ {product.offer.title}</Text>}
           <Text style={styles.name}>{product.name}</Text>
           <Text style={styles.where}>{whereLabel(product)}</Text>
         </View>
         <View style={styles.prices}>
           <Text style={styles.price}>{formatInr(product.pricePaise)}</Text>
-          {product.mrpPaise > product.pricePaise && <Text style={styles.mrp}>MRP {formatInr(product.mrpPaise)}</Text>}
+          {product.offer ? (
+            <Text style={styles.mrp}>was {formatInr(product.offer.regularPaise)}</Text>
+          ) : (
+            product.mrpPaise > product.pricePaise && <Text style={styles.mrp}>MRP {formatInr(product.mrpPaise)}</Text>
+          )}
           {unit && <Text style={styles.unit}>{unit}</Text>}
         </View>
       </View>
@@ -57,6 +62,7 @@ const styles = StyleSheet.create({
   card: { backgroundColor: colors.surface, borderRadius: 14, padding: 14, borderWidth: 1, borderColor: colors.border, gap: 8 },
   top: { flexDirection: "row", gap: 12 },
   badge: { alignSelf: "flex-start", fontSize: 11, fontWeight: "700", color: colors.brand, marginBottom: 2, letterSpacing: 0.3 },
+  offer: { alignSelf: "flex-start", fontSize: 12, fontWeight: "700", color: "#9A3412", marginBottom: 2 },
   name: { fontSize: 16, fontWeight: "600", color: colors.text },
   where: { fontSize: 14, color: colors.brand, fontWeight: "600", marginTop: 2 },
   prices: { alignItems: "flex-end" },

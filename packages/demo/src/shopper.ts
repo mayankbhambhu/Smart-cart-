@@ -18,6 +18,7 @@ import type {
   CheckoutResponse,
   HelpRequest,
   HelpTopic,
+  OffersResponse,
   Receipt,
   RouteListResponse,
   Reservation,
@@ -26,6 +27,7 @@ import type {
   StaffAccount,
 } from "@smart-cart/contracts";
 import { catalog } from "./catalog.js";
+import { Deals, type DemoOffer } from "./deals.js";
 import { DemoApiError } from "./errors.js";
 import { browse, retrieve, routeList, rulesAnswer, search } from "./find.js";
 import { sections } from "./sections.js";
@@ -48,7 +50,11 @@ export type BridgeMessage =
   | { kind: "event"; event: SmartCartEvent; shopperName?: string }
   | { kind: "order"; order: BridgeOrder }
   /** A store-team account approved in one demo tab, so the other can sign it in. Demo only. */
-  | { kind: "staff"; account: StaffAccount; password: string };
+  | { kind: "staff"; account: StaffAccount; password: string }
+  /** The dashboard's offers, sent when a manager changes one and with each hello. */
+  | { kind: "offers"; offers: DemoOffer[] }
+  /** A search in the app, so the dashboard's Reports count it (spoken ones too). */
+  | { kind: "search"; query: string; source: "search" | "voice" | "list" | "assistant"; resultCount: number };
 
 export type BridgeSession = {
   sessionId: string;
@@ -118,6 +124,7 @@ export class ShopperDemo {
   private channel: BroadcastChannel | null = null;
   private dashboardSeenAt = 0;
   readonly team: StoreTeam;
+  readonly deals = new Deals();
 
   constructor() {
     if (typeof BroadcastChannel !== "undefined") {
@@ -156,8 +163,9 @@ export class ShopperDemo {
 
     if (route("GET", /^\/v1\/stores$/)) return { stores: [{ id: STORE_ID, name: STORE_NAME, city: "Mumbai" }] };
     if ((match = route("GET", /^\/v1\/products\/barcode\/(\d+)$/))) {
-      const product = byBarcode.get(match[1]!);
-      if (!product) throw new DemoApiError(404, "product_not_found");
+      const found = byBarcode.get(match[1]!);
+      if (!found) throw new DemoApiError(404, "product_not_found");
+      const product = this.deals.priced(found);
       return {
         productId: product.productId,
         barcode: product.barcode,
@@ -173,10 +181,19 @@ export class ShopperDemo {
       };
     }
     if ((match = route("GET", /^\/v1\/stores\/[^/]+\/products\/search$/))) {
-      return { query: url.searchParams.get("q"), results: this.find(url.searchParams.get("q") ?? "", url.searchParams.getAll("diet")).slice(0, 20) };
+      const q = url.searchParams.get("q") ?? "";
+      const results = this.find(q, url.searchParams.getAll("diet"));
+      const source = url.searchParams.get("source") === "voice" ? "voice" : "search";
+      if (q.trim()) this.post({ kind: "search", query: q, source, resultCount: results.length });
+      return { query: q, results: results.slice(0, 20) };
+    }
+    if (route("GET", /^\/v1\/stores\/[^/]+\/offers$/)) {
+      const aisle = url.searchParams.get("aisle");
+      const diet = url.searchParams.getAll("diet").flatMap((d) => d.split(",")).filter(Boolean);
+      return { storeId: STORE_ID, aisle, offers: this.deals.forShoppers((id) => this.available(id), aisle, diet) } satisfies OffersResponse;
     }
     if (route("GET", /^\/v1\/sections$/)) return sectionsResponse();
-    if (route("GET", /^\/v1\/products$/)) return browseResponse(url, (id) => this.available(id));
+    if (route("GET", /^\/v1\/products$/)) return browseResponse(url, (id) => this.available(id), this.deals.catalog());
     if (route("POST", /^\/v1\/stores\/[^/]+\/lists\/route$/)) {
       return routeList((q) => this.find(q), (body as { lines: string[] }).lines) satisfies RouteListResponse;
     }
@@ -505,6 +522,7 @@ export class ShopperDemo {
       return;
     }
     if (msg.kind === "staff") return this.team.adopt(msg.account, msg.password);
+    if (msg.kind === "offers") return this.deals.adopt(msg.offers);
     if (msg.kind !== "event" || msg.event.type !== "help.updated") return;
     const evt = msg.event;
     const h = this.help.find((x) => x.id === evt.data.id);
@@ -623,7 +641,7 @@ export class ShopperDemo {
   }
 
   private find(q: string, diet: string[] = []): SearchResult[] {
-    return search(catalog, (id) => this.available(id), q, diet);
+    return search(this.deals.catalog(), (id) => this.available(id), q, diet);
   }
 
   private snapshot(s: Session): CartSnapshot {
@@ -638,7 +656,8 @@ export class ShopperDemo {
     };
   }
 
-  private line(p: DemoProduct, qty: number): CartLine {
+  private line(product: DemoProduct, qty: number): CartLine {
+    const p = this.deals.priced(product);
     const lineTotalPaise = p.pricePaise * qty;
     return {
       productId: p.productId,
@@ -690,12 +709,16 @@ export function sectionsResponse() {
 }
 
 /** GET /v1/products?section=&category=&food_type=&tags= */
-export function browseResponse(url: URL, available: (productId: string) => number) {
+export function browseResponse(
+  url: URL,
+  available: (productId: string) => number,
+  products: (DemoProduct & { offer?: SearchResult["offer"] })[] = catalog,
+) {
   const list = (key: string) => url.searchParams.getAll(key).flatMap((v) => v.split(",")).filter(Boolean);
   const section = url.searchParams.get("section");
   const category = url.searchParams.get("category");
   if (!section && !category) throw new DemoApiError(400, "section_or_category_required");
-  const results = browse(catalog, available, { section, category, foodTypes: list("food_type"), tags: list("tags") }, sections);
+  const results = browse(products, available, { section, category, foodTypes: list("food_type"), tags: list("tags") }, sections);
   return { storeId: STORE_ID, section, category, results };
 }
 

@@ -7,11 +7,13 @@
  * the simulated ones over a BroadcastChannel, and staff answering a help request here updates the app.
  * Store-team sign-in, staff accounts, reservations and tasks come from the shared StoreTeam; accounts
  * approved here can sign in on the app's staff mode, and the app's reservations show on the board.
+ * Offers made on the Offers page are sent to the app, which prices and announces them by aisle.
  */
 import type {
   AskResponse,
   ExitCheckResponse,
   HelpRequest,
+  OfferCreateRequest,
   HelpTopic,
   Receipt,
   SearchResult,
@@ -22,6 +24,7 @@ import type { ActiveCart, InventoryItem, OrderRow, Totals } from "../api";
 import {
   browseResponse,
   catalog,
+  Deals,
   DEMO_APP_CARTS,
   DEMO_CHANNEL,
   DemoApiError,
@@ -94,6 +97,7 @@ class DemoStore {
   /** Food labels a manager corrected on the Inventory page. */
   private labels = new Map<string, Product["foodType"]>();
   paused = false;
+  readonly deals = new Deals();
   readonly team = new StoreTeam({
     storeId: STORE,
     available: (id) => this.available(id),
@@ -131,9 +135,12 @@ class DemoStore {
     }
     // A week of searches (some for things the store doesn't stock) and earlier help requests.
     const words = ["milk", "atta", "haldi", "toor dal", "shampoo", "paneer", "biscuits", "rice", "chai", "ghee"];
+    const spoken = ["haldi kahan milega", "चीनी कहाँ है", "where is the ghee", "doodh kahan hai", "मुझे आटा चाहिए"];
     for (let i = 0; i < 160; i++) {
-      const q = i % 5 === 0 ? MISSING[i % MISSING.length]! : words[i % words.length]!;
-      this.logSearch(q, i % 3 === 0 ? "list" : "search", this.find(q).length, Date.now() - (i * 61 + 7) * 60_000);
+      const voice = i % 7 === 3;
+      const q = voice ? spoken[i % spoken.length]! : i % 5 === 0 ? MISSING[i % MISSING.length]! : words[i % words.length]!;
+      const source = voice ? "voice" : i % 3 === 0 ? "list" : "search";
+      this.logSearch(q, source, this.find(q).length, Date.now() - (i * 61 + 7) * 60_000);
     }
     for (let i = 0; i < 9; i++) {
       const [topic, note] = HELP_NOTES[i % HELP_NOTES.length]!;
@@ -168,9 +175,14 @@ class DemoStore {
       });
       // Tells the app demo a dashboard is open, so staff here (not a simulated one) answer help.
       const hello = (fresh: boolean) => this.channel?.postMessage({ kind: "hello", fresh } satisfies BridgeMessage);
+      // The dashboard's offers are the store's offers: sent on every change and with each hello.
+      const offers = () => this.channel?.postMessage({ kind: "offers", offers: this.deals.all() } satisfies BridgeMessage);
+      this.deals.onChange(offers);
       hello(true);
+      offers();
       setInterval(() => {
         hello(false);
+        offers();
         issued.forEach((m) => this.channel?.postMessage(m));
       }, 5_000);
     }
@@ -186,11 +198,23 @@ class DemoStore {
     const forTeam = this.team.handle(method, url, body, caller);
     if (forTeam !== undefined) return forTeam;
     if (method === "GET" && url.pathname === "/v1/sections") return sectionsResponse();
-    if (method === "GET" && url.pathname === "/v1/products") return browseResponse(url, (id) => this.available(id));
+    if (method === "GET" && url.pathname === "/v1/products")
+      return browseResponse(url, (id) => this.available(id), this.deals.catalog());
+    if (method === "GET" && url.pathname === `/v1/stores/${STORE}/offers`) {
+      const aisle = url.searchParams.get("aisle");
+      const diet = url.searchParams.getAll("diet").flatMap((d) => d.split(",")).filter(Boolean);
+      return { storeId: STORE, aisle, offers: this.deals.forShoppers((id) => this.available(id), aisle, diet) };
+    }
     // The store pages need a manager (or the admin team), as on the API. The shopper view is open.
     if (url.pathname.startsWith("/admin/")) this.manager(caller);
     const label = method === "PATCH" ? new RegExp(`^/admin/v1/stores/${STORE}/catalog/products/([^/]+)$`).exec(url.pathname) : null;
     if (label) return this.label(label[1]!, body as { foodType?: Product["foodType"] });
+    if (url.pathname === `/admin/v1/stores/${STORE}/offers`) {
+      if (method === "GET") return { storeId: STORE, offers: this.deals.forManagers() };
+      if (method === "POST") return this.deals.create(body as OfferCreateRequest);
+    }
+    const endOffer = method === "POST" ? new RegExp(`^/admin/v1/stores/${STORE}/offers/([^/]+)/end$`).exec(url.pathname) : null;
+    if (endOffer) return this.deals.end(endOffer[1]!);
     if (method === "GET") return this.get(url);
     if (method === "POST") return this.post(url.pathname, body);
     throw new DemoApiError(404, "not_found");
@@ -244,7 +268,7 @@ class DemoStore {
     if (url.pathname === `/v1/stores/${STORE}/products/search`) {
       const q = url.searchParams.get("q") ?? "";
       const results = this.find(q, url.searchParams.getAll("diet"));
-      this.logSearch(q, "search", results.length);
+      this.logSearch(q, url.searchParams.get("source") === "voice" ? "voice" : "search", results.length);
       return { query: q, results: results.slice(0, 20) };
     }
     if (url.pathname === `/v1/stores/${STORE}/help/mine`) {
@@ -496,7 +520,7 @@ class DemoStore {
   }
 
   private find(q: string, diet: string[] = []): SearchResult[] {
-    return search(catalog, (id) => this.available(id), q, diet);
+    return search(this.deals.catalog(), (id) => this.available(id), q, diet);
   }
 
   private logSearch(query: string, source: string, resultCount: number, at = Date.now()) {
@@ -548,6 +572,7 @@ class DemoStore {
       days,
       searches: logs.length,
       missedSearches: topMissed.reduce((n, m) => n + m.count, 0),
+      voiceSearches: logs.filter((l) => l.source === "voice").length,
       topMissed,
       help: {
         total: help.length,
@@ -590,6 +615,8 @@ class DemoStore {
 
   private fromApp(msg: BridgeMessage) {
     if (msg.kind === "staff") return this.team.adopt(msg.account, msg.password);
+    if (msg.kind === "search") return this.logSearch(msg.query, msg.source, msg.resultCount);
+    if (msg.kind === "offers") return;
     if (msg.kind === "sync") {
       for (const app of msg.sessions) {
         if (this.sessions.has(app.sessionId)) continue;
@@ -723,7 +750,8 @@ class DemoStore {
     };
   }
 
-  private line(p: Product, qty: number) {
+  private line(product: Product, qty: number) {
+    const p = this.deals.priced(product);
     const lineTotalPaise = p.pricePaise * qty;
     return {
       productId: p.productId,

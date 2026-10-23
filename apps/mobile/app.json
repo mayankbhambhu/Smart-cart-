@@ -47,6 +47,16 @@
           "merchantIdentifier": "merchant.in.smartcart",
           "enableGooglePay": false
         }
+      ],
+      [
+        "expo-speech-recognition",
+        {
+          "microphonePermission": "Smart Cart uses the microphone when you tap the mic to search for a product by voice.",
+          "speechRecognitionPermission": "Smart Cart turns what you say into a product search, in English or Hindi.",
+          "androidSpeechServicePackages": [
+            "com.google.android.googlequicksearchbox"
+          ]
+        }
       ]
     ]
   }

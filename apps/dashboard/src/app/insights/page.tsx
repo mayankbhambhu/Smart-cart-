@@ -56,7 +56,7 @@ export default function ReportsPage() {
       ) : (
         <>
           <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-            <Tile label="Searches" value={data.searches.toLocaleString("en-IN")} />
+            <Tile label="Searches" value={data.searches.toLocaleString("en-IN")} note={`${data.voiceSearches} spoken into the mic`} />
             <Tile
               label="Found nothing"
               value={data.searches ? `${Math.round((data.missedSearches / data.searches) * 100)}%` : "—"}

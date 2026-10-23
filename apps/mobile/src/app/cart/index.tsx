@@ -3,6 +3,7 @@ import { router, Stack } from "expo-router";
 import { Alert, FlatList, Pressable, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { BudgetBar } from "../../components/BudgetBar";
+import { DealAlert } from "../../components/DealAlert";
 import { Button } from "../../components/Button";
 import { FindItFast } from "../../components/FindItFast";
 import { HelpBanner } from "../../components/HelpBanner";
@@ -70,6 +71,7 @@ export default function LiveCartScreen() {
         contentContainerStyle={cart.lines.length === 0 ? styles.emptyList : { paddingBottom: 16 }}
         ListHeaderComponent={
           <View style={styles.tools}>
+            <DealAlert />
             <FindItFast />
             <HelpBanner compact />
           </View>

@@ -3,9 +3,11 @@ import { create } from "zustand";
 import { api } from "./api";
 import { DEFAULT_STORE_ID } from "./config";
 import { storage } from "./storage";
+import type { VoiceLang } from "./voice-logic";
 
 const BUDGET_KEY = "smartcart.budgetPaise";
 const DIET_KEY = "smartcart.dietPref";
+const VOICE_KEY = "smartcart.voice";
 
 export type ChatMessage = ChatTurn & { products?: SearchResult[]; mode?: "ai" | "rules" };
 
@@ -22,6 +24,10 @@ type AssistState = {
   /** Product ids ticked off on the route. */
   picked: Record<string, true>;
   chat: ChatMessage[];
+  /** The language the mic listens in and answers are read aloud in (US-02). */
+  voiceLang: VoiceLang;
+  /** Read the answer to a spoken search aloud. */
+  readAloud: boolean;
 
   setStoreId: (storeId: string) => void;
   setHelp: (request: HelpRequest | null) => void;
@@ -35,6 +41,7 @@ type AssistState = {
   planRoute: (lines: string[]) => Promise<RouteListResponse>;
   togglePicked: (productId: string) => void;
   ask: (message: string) => Promise<void>;
+  setVoice: (voice: { voiceLang?: VoiceLang; readAloud?: boolean }) => Promise<void>;
 };
 
 export const useAssist = create<AssistState>((set, get) => ({
@@ -46,6 +53,8 @@ export const useAssist = create<AssistState>((set, get) => ({
   route: null,
   picked: {},
   chat: [],
+  voiceLang: "en-IN",
+  readAloud: true,
 
   setStoreId: (storeId) => set({ storeId }),
   setHelp: (help) => set({ help }),
@@ -64,11 +73,15 @@ export const useAssist = create<AssistState>((set, get) => ({
   },
 
   loadBudget: async () => {
-    const [saved, diet] = await Promise.all([
+    const [saved, diet, voice] = await Promise.all([
       storage.get(BUDGET_KEY).catch(() => null),
       storage.get(DIET_KEY).catch(() => null),
+      storage.get(VOICE_KEY).catch(() => null),
     ]);
+    const [lang, aloud] = (voice ?? "").split(",");
     set({
+      voiceLang: lang === "hi-IN" ? "hi-IN" : "en-IN",
+      readAloud: aloud !== "quiet",
       budgetPaise: saved ? Number(saved) || null : null,
       dietPref: diet ? (diet.split(",").filter(Boolean) as DietTag[]) : [],
     });
@@ -97,6 +110,12 @@ export const useAssist = create<AssistState>((set, get) => ({
     if (picked[productId]) delete picked[productId];
     else picked[productId] = true;
     set({ picked });
+  },
+
+  setVoice: async (voice) => {
+    set(voice);
+    const { voiceLang, readAloud } = get();
+    await storage.set(VOICE_KEY, `${voiceLang},${readAloud ? "aloud" : "quiet"}`).catch(() => {});
   },
 
   ask: async (message) => {

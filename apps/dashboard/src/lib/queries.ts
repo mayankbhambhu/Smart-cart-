@@ -1,3 +1,4 @@
+import type { StoreOffer } from "@smart-cart/contracts";
 import type { Reservation, StaffAccount, StaffRequest, StaffRequestStatus, StaffTask, StockCorrection } from "@smart-cart/contracts";
 import { apiGet, STORE_ID } from "./api";
 
@@ -35,4 +36,9 @@ export const correctionsQuery = (days: number) => ({
   queryKey: ["corrections", STORE_ID, days],
   queryFn: () =>
     apiGet<{ corrections: StockCorrection[] }>(`${store}/reports/stock-corrections?days=${days}`).then((r) => r.corrections),
+});
+
+export const offersQuery = () => ({
+  queryKey: ["offers", STORE_ID],
+  queryFn: () => apiGet<{ offers: StoreOffer[] }>(`${store}/offers`).then((r) => r.offers),
 });

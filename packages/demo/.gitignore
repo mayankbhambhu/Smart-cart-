@@ -1,2 +1,3 @@
 dist
 src/catalog.ts
+src/seed-offers.ts

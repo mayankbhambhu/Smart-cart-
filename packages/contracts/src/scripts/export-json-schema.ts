@@ -12,6 +12,7 @@ import {
   StoreInsights,
 } from "../assist.js";
 import { AddItemRequest, CartSnapshot, PairCartRequest } from "../cart.js";
+import { OfferCreateRequest, OffersResponse, StoreOffersResponse } from "../deals.js";
 import { SmartCartEvent } from "../events.js";
 import { CheckoutResponse, ExitCheckResponse, Receipt } from "../order.js";
 import {
@@ -44,6 +45,9 @@ const schemas = {
   StoreInsights,
   SectionsResponse,
   BrowseResponse,
+  OffersResponse,
+  StoreOffersResponse,
+  OfferCreateRequest,
   StaffLoginResponse,
   MeResponse,
   StaffAccount,

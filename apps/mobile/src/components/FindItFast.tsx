@@ -7,9 +7,10 @@ const TILES: { href: Href; icon: string; title: string; sub: string }[] = [
   { href: "/find", icon: "🔎", title: "Find", sub: "Aisle, shelf, stock" },
   { href: "/list", icon: "📝", title: "Smart list", sub: "Shortest route" },
   { href: "/ask", icon: "💬", title: "Ask", sub: "SmartCart AI" },
+  { href: "/deals", icon: "🏷️", title: "Deals", sub: "Offers by aisle" },
 ];
 
-/** Shortcuts to the milestone 4 tools, on the home and cart screens. */
+/** Shortcuts to the find-it-fast tools and deals, on the home and cart screens. */
 export function FindItFast() {
   return (
     <View style={styles.row}>
@@ -31,7 +32,7 @@ export function FindItFast() {
 
 const styles = StyleSheet.create({
   row: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-  tile: { flexBasis: "22%", flexGrow: 1, minWidth: 140, backgroundColor: colors.surface, borderRadius: 14, padding: 12, borderWidth: 1, borderColor: colors.border, gap: 2 },
+  tile: { flexBasis: "30%", flexGrow: 1, minWidth: 100, backgroundColor: colors.surface, borderRadius: 14, padding: 12, borderWidth: 1, borderColor: colors.border, gap: 2 },
   icon: { fontSize: 22 },
   title: { fontSize: 15, fontWeight: "600", color: colors.text },
   sub: { fontSize: 12, color: colors.muted },
