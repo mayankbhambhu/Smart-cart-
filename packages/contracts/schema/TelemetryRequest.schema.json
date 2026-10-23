@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "batteryPct": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 100
+    },
+    "weightG": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 200000
+    },
+    "aisle": {
+      "anyOf": [
+        {
+          "type": "string",
+          "maxLength": 8
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "faults": {
+      "maxItems": 10,
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "required": [
+    "batteryPct",
+    "weightG"
+  ]
+}

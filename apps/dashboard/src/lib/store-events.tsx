@@ -33,6 +33,12 @@ export function StoreEventsProvider({ children }: { children: ReactNode }) {
         case "cart.session_started":
         case "cart.session_ended":
           void queryClient.invalidateQueries({ queryKey: ["carts", STORE_ID] });
+          void queryClient.invalidateQueries({ queryKey: ["fleet", STORE_ID] });
+          break;
+        case "security.alert":
+        case "security.updated":
+          void queryClient.invalidateQueries({ queryKey: ["security", STORE_ID] });
+          void queryClient.invalidateQueries({ queryKey: ["fleet", STORE_ID] });
           break;
         case "cart.checked_out":
           queryClient.setQueryData<{ sessions: ActiveCart[] }>(["carts", STORE_ID], (old) =>

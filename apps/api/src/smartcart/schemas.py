@@ -145,9 +145,16 @@ class ExitCheckRequest(Wire):
     code: str = Field(min_length=4, max_length=200)
 
 
+class BagCheck(Wire):
+    alert_id: str
+    reason: str
+
+
 class ExitCheckResponse(Wire):
     result: Literal["ok", "already_used", "not_paid", "not_found"]
     order: Receipt | None
+    # Set when the cart's weight didn't match its scanned items and nobody has cleared that yet.
+    bag_check: BagCheck | None = None
 
 
 # ---- Milestone 4: find it fast ----------------------------------------------------------------
@@ -270,3 +277,29 @@ class OfferCreateRequest(Wire):
     offer_price_paise: int = Field(gt=0)
     starts_at: datetime | None = None
     ends_at: datetime
+
+
+# ---- Milestone 7: anti-theft and the cart fleet --------------------------------------------------
+
+
+class TelemetryRequest(Wire):
+    """One reading from a cart's hardware (or the simulator)."""
+
+    battery_pct: int = Field(ge=0, le=100)
+    weight_g: int = Field(ge=0, le=200_000)
+    aisle: str | None = Field(default=None, max_length=8)
+    faults: list[str] = Field(default_factory=list, max_length=10)
+
+
+class GatePassRequest(Wire):
+    cart_id: str = Field(min_length=1, max_length=20)
+
+
+class SecurityActionRequest(Wire):
+    action: Literal["acknowledge", "resolve", "false_alarm"]
+    note: str | None = Field(default=None, max_length=200)
+
+
+class CartStatusRequest(Wire):
+    status: Literal["available", "maintenance"]
+    reason: str | None = Field(default=None, max_length=200)

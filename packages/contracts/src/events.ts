@@ -2,6 +2,7 @@ import { z } from "zod";
 import { HelpRequest } from "./assist.js";
 import { CartLine, CartSnapshot, CartTotals } from "./cart.js";
 import { Reservation } from "./store.js";
+import { SecurityAlert, WeightCheckStatus } from "./security.js";
 
 /**
  * Who produced the event. In V1 only the phone produces cart events;
@@ -83,6 +84,16 @@ export const ReservationUpdatedEvent = envelope("reservation.updated", Reservati
 /** Tasks changed; screens refetch. taskId is null when several changed at once. */
 export const TaskUpdatedEvent = envelope("task.updated", z.object({ taskId: z.string().nullable() }));
 
+/** To the shopper's cart: the basket's weight stopped (or started again) matching the scanned items. */
+export const CartWeightCheckEvent = envelope(
+  "cart.weight_check",
+  z.object({ sessionId: z.string(), status: WeightCheckStatus, diffG: z.number().int().nullable() }),
+);
+/** To staff screens: a cart needs checking. */
+export const SecurityAlertEvent = envelope("security.alert", SecurityAlert);
+/** Acknowledged, resolved, marked a false alarm, or cleared by the cart itself. */
+export const SecurityUpdatedEvent = envelope("security.updated", SecurityAlert);
+
 export const SmartCartEvent = z.discriminatedUnion("type", [
   CartSnapshotEvent,
   CartItemAddedEvent,
@@ -98,6 +109,9 @@ export const SmartCartEvent = z.discriminatedUnion("type", [
   ReservationCreatedEvent,
   ReservationUpdatedEvent,
   TaskUpdatedEvent,
+  CartWeightCheckEvent,
+  SecurityAlertEvent,
+  SecurityUpdatedEvent,
 ]);
 export type SmartCartEvent = z.infer<typeof SmartCartEvent>;
 export type SmartCartEventType = SmartCartEvent["type"];

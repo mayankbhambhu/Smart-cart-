@@ -8,6 +8,8 @@
  * Store-team sign-in, staff accounts, reservations and tasks come from the shared StoreTeam; accounts
  * approved here can sign in on the app's staff mode, and the app's reservations show on the board.
  * Offers made on the Offers page are sent to the app, which prices and announces them by aisle.
+ * Carts report battery, aisle and basket weight; an unscanned item becomes a security alert here, and
+ * the app's own carts' alerts arrive over the same channel.
  */
 import type {
   AskResponse,
@@ -29,6 +31,8 @@ import {
   DEMO_CHANNEL,
   DemoApiError,
   exitCode,
+  FLEET,
+  Guard,
   gstIncluded,
   retrieve,
   routeList,
@@ -53,6 +57,8 @@ type Session = {
   lastAisle: string | null;
   /** A shopper using the app demo in another tab, not one of the simulated ones. */
   fromApp?: boolean;
+  /** Something in the basket that was never scanned, and whether the shopper will scan it after the nudge. */
+  unscanned?: { product: Product; willScan: boolean };
 };
 
 type SearchLogRow = { query: string; source: string; resultCount: number; at: number };
@@ -98,6 +104,19 @@ class DemoStore {
   private labels = new Map<string, Product["foodType"]>();
   paused = false;
   readonly deals = new Deals();
+  readonly guard = new Guard({
+    storeId: STORE,
+    sessionFor: (code) => {
+      const s = [...this.sessions.values()].find((x) => x.cartCode === code);
+      return s ? { ...s, lines: s.lines } : null;
+    },
+    weighs: (code) => [...this.sessions.values()].some((x) => x.cartCode === code && !x.fromApp),
+    emit: (e) => {
+      this.emit(e);
+      // The app demo's staff mode shows the same alerts.
+      if (e.type !== "cart.weight_check") this.channel?.postMessage({ kind: "event", event: e } satisfies BridgeMessage);
+    },
+  });
   readonly team = new StoreTeam({
     storeId: STORE,
     available: (id) => this.available(id),
@@ -119,6 +138,12 @@ class DemoStore {
   });
 
   constructor() {
+    this.guard.setStatus("C-0011", "maintenance", "Wobbly front wheel");
+    this.guard.seedHistory([
+      { cartId: "C-0006", shopperName: "Meera Iyer", kind: "unscanned_item", aisle: "C2", diffG: 250, minutesAgo: 190, status: "resolved", by: "Rajesh Kumar", note: "Scanned at the door, all fine" },
+      { cartId: "C-0013", shopperName: "Kabir Shah", kind: "unscanned_item", aisle: "B3", diffG: 900, minutesAgo: 140, status: "cleared" },
+      { cartId: "C-0002", shopperName: "Divya Menon", kind: "exit_unpaid", aisle: "EXIT", minutesAgo: 75, status: "false_alarm", by: "Rajesh Kumar", note: "Went back in to pay" },
+    ]);
     // Earlier shoppers who already paid (most of them have left through the exit).
     for (let i = 0; i < 5; i++) {
       const s = this.pair(Date.now() - (60 - i * 9) * 60_000, false);
@@ -180,9 +205,13 @@ class DemoStore {
       this.deals.onChange(offers);
       hello(true);
       offers();
+      const fleet = () => this.channel?.postMessage({ kind: "fleet", maintenance: this.guard.maintenanceCarts() } satisfies BridgeMessage);
+      this.guard.onChange(fleet);
+      fleet();
       setInterval(() => {
         hello(false);
         offers();
+        fleet();
         issued.forEach((m) => this.channel?.postMessage(m));
       }, 5_000);
     }
@@ -212,6 +241,20 @@ class DemoStore {
     if (url.pathname === `/admin/v1/stores/${STORE}/offers`) {
       if (method === "GET") return { storeId: STORE, offers: this.deals.forManagers() };
       if (method === "POST") return this.deals.create(body as OfferCreateRequest);
+    }
+    const alerts = `/admin/v1/stores/${STORE}/security-alerts`;
+    if (method === "GET" && url.pathname === alerts)
+      return { storeId: STORE, alerts: this.guard.list(url.searchParams.get("openOnly") !== "false") };
+    const act = method === "POST" ? new RegExp(`^${alerts}/([^/]+)$`).exec(url.pathname) : null;
+    if (act) {
+      const b = body as { action: string; note?: string | null };
+      return this.guard.act(act[1]!, b.action, b.note?.trim() || null, caller?.kind === "staff" ? caller.name : "Manager");
+    }
+    if (method === "GET" && url.pathname === `/admin/v1/stores/${STORE}/fleet`) return { storeId: STORE, carts: this.guard.fleet() };
+    const cartStatus = method === "POST" ? new RegExp(`^/admin/v1/stores/${STORE}/carts/([^/]+)/status$`).exec(url.pathname) : null;
+    if (cartStatus) {
+      const b = body as { status: string; reason?: string | null };
+      return this.guard.setStatus(cartStatus[1]!, b.status, b.reason ?? null);
     }
     const endOffer = method === "POST" ? new RegExp(`^/admin/v1/stores/${STORE}/offers/([^/]+)/end$`).exec(url.pathname) : null;
     if (endOffer) return this.deals.end(endOffer[1]!);
@@ -291,10 +334,11 @@ class DemoStore {
       const raw = String((body as { code?: string }).code ?? "");
       const code = (raw.includes("code=") ? raw.split("code=")[1]! : raw).trim().toUpperCase();
       const order = this.orders.find((o) => o.exitCode === code);
-      if (!order) return { result: "not_found", order: null } satisfies ExitCheckResponse;
+      if (!order) return { result: "not_found", order: null, bagCheck: null } satisfies ExitCheckResponse;
       const result = order.exitUsedAt ? "already_used" : "ok";
       order.exitUsedAt ??= new Date().toISOString();
-      return { result, order: this.receipt(order) } satisfies ExitCheckResponse;
+      const bagCheck = result === "ok" ? this.guard.bagCheck(order.session.sessionId) : null;
+      return { result, order: this.receipt(order), bagCheck } satisfies ExitCheckResponse;
     }
     if (path === `/v1/stores/${STORE}/lists/route`) {
       const lines = (body as { lines: string[] }).lines;
@@ -366,7 +410,34 @@ class DemoStore {
 
   /** The code of a paid order nobody has shown at the exit yet, so testers can try the door check. */
   unusedExitCode(): string | null {
-    return this.orders.find((o) => !o.exitUsedAt)?.exitCode ?? null;
+    const unused = this.orders.filter((o) => !o.exitUsedAt);
+    // One that needs a bag check first, so testers see that case too.
+    return (unused.find((o) => this.guard.bagCheck(o.session.sessionId)) ?? unused[0])?.exitCode ?? null;
+  }
+
+  /** A simulated shopper puts an item in the basket without scanning it, and doesn't scan it after the nudge. */
+  triggerUnscanned() {
+    const s = [...this.sessions.values()].find((x) => !x.fromApp && x.status === "active" && !x.unscanned) ?? this.pair(Date.now(), true);
+    if (!s) return;
+    if (s.lines.size === 0) this.add(s, true);
+    this.putUnscanned(s, false);
+    this.guard.sense(s.cartCode);
+    // Staff hear about it once it has lasted, even with the shoppers paused.
+    setTimeout(() => this.guard.sense(s.cartCode), this.guard.alertAfterMs + 200);
+  }
+
+  /** A cart still shopping rolls through the exit gate. */
+  triggerExitGate() {
+    const s = [...this.sessions.values()].find((x) => !x.fromApp && x.status === "active") ?? this.pair(Date.now(), true);
+    if (!s) return;
+    if (s.lines.size === 0) this.add(s, true);
+    this.guard.gatePass(s.cartCode, "G1");
+  }
+
+  private putUnscanned(s: Session, willScan: boolean) {
+    const product = pick(catalog.filter((p) => p.weightG && this.available(p.productId) > 0));
+    s.unscanned = { product, willScan };
+    this.guard.setUnscanned(s.cartCode, product.weightG!);
   }
 
   /** A shopper takes enough of the item closest to its threshold to trigger a low-stock alert. */
@@ -384,8 +455,18 @@ class DemoStore {
   }
 
   private tick() {
+    // Every cart checks in: battery, beacon and (for the simulated ones) the basket's weight.
+    for (const cart of FLEET) this.guard.sense(cart);
     const sessions = [...this.sessions.values()].filter((s) => !s.fromApp);
     const r = Math.random();
+    // Most shoppers scan the item once the cart nudges them.
+    const nudged = sessions.find((s) => s.unscanned?.willScan && Math.random() < 0.3);
+    if (nudged) {
+      const { product } = nudged.unscanned!;
+      nudged.unscanned = undefined;
+      this.guard.setUnscanned(nudged.cartCode, 0);
+      return this.add(nudged, true, product, 1);
+    }
     if (sessions.length === 0 || (sessions.length < MAX_CARTS && r < 0.2)) return this.addShopper();
     const paying = sessions.find((s) => s.status === "checking_out");
     if (paying && r < 0.6) return void this.pay(paying, true);
@@ -397,6 +478,7 @@ class DemoStore {
       return void this.callHelp(s, topic, note, true);
     }
     if (r > 0.9) return this.logSearch(pick(MISSING), "search", 0);
+    if (r > 0.875 && !s.unscanned && s.lines.size > 0) return this.putUnscanned(s, Math.random() < 0.75);
     const items = [...s.lines.values()].reduce((a, b) => a + b, 0);
     if (r < 0.3 && items >= 4) return this.checkout(s);
     if (r < 0.38 && s.lines.size > 0) return this.removeOne(s);
@@ -405,8 +487,10 @@ class DemoStore {
 
   private pair(startedAt: number, emit: boolean): Session | null {
     // App-demo carts and carts parked at the pickup point are never taken by simulated shoppers.
-    const used = new Set([...this.sessions.values()].map((s) => s.cartCode).concat(DEMO_APP_CARTS, PICKUP_CARTS));
-    const free = Array.from({ length: 20 }, (_, i) => `C-${String(i + 1).padStart(4, "0")}`).filter((c) => !used.has(c));
+    const used = new Set(
+      [...this.sessions.values()].map((s) => s.cartCode).concat(DEMO_APP_CARTS, PICKUP_CARTS, this.guard.maintenanceCarts()),
+    );
+    const free = FLEET.filter((c) => !used.has(c));
     const names = new Set([...this.sessions.values()].map((s) => s.shopperName));
     const shoppers = SHOPPERS.filter((n) => !names.has(n));
     if (free.length === 0 || shoppers.length === 0) return null;
@@ -478,6 +562,7 @@ class DemoStore {
   /** Payment succeeds: reserved units become sold units, the cart is freed, an exit code issued. */
   private pay(s: Session, emit: boolean, at = Date.now()): DemoOrder {
     this.sessions.delete(s.sessionId);
+    this.guard.sense(s.cartCode); // the cart is free: it stops weighing
     const totals = this.totals(s);
     const order: DemoOrder = {
       orderId: uuid(),
@@ -644,6 +729,14 @@ class DemoStore {
     if (msg.kind !== "event") return;
     const e = msg.event;
     if (e.type === "reservation.created" || e.type === "reservation.updated") return this.team.mirror(e.data);
+    if (e.type === "security.alert" || e.type === "security.updated") {
+      this.guard.mirror(e.data);
+      return this.emit(e);
+    }
+    if (e.type === "cart.weight_check") {
+      if (e.cartId) this.guard.mirrorCheck(e.cartId, e.data.status);
+      return;
+    }
     if (e.type === "cart.session_started") {
       this.sessions.set(e.data.sessionId, {
         sessionId: e.data.sessionId,
@@ -689,6 +782,7 @@ class DemoStore {
       const s = this.sessions.get(e.data.sessionId);
       for (const [productId, qty] of s?.lines ?? []) this.reserved.set(productId, this.reserved.get(productId)! - qty);
       this.sessions.delete(e.data.sessionId);
+      if (s) this.guard.sense(s.cartCode);
     } else if (e.type === "help.requested") {
       if (this.help.some((h) => h.id === e.data.id)) return;
       this.help.push({ ...e.data });

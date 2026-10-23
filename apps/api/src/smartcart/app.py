@@ -16,6 +16,7 @@ from redis.asyncio import Redis
 from .assist_service import AssistService
 from .assistant import Assistant
 from .auth import DevTokenVerifier, FirebaseTokenVerifier, SessionTokenVerifier, TokenVerifier
+from .cart_guard import CartGuard
 from .cart_service import CartService
 from .checkout_service import CheckoutService
 from .config import Settings, get_settings
@@ -23,7 +24,7 @@ from .db import make_engine, make_sessionmaker
 from .errors import ApiError
 from .payments import make_provider
 from .realtime import Realtime
-from .routes import admin, assist, carts, catalog, health, offers, orders, staff
+from .routes import admin, assist, carts, catalog, health, offers, orders, security, staff
 from .staff_service import StaffService
 from .store_ops import StoreOps
 
@@ -54,6 +55,8 @@ def create_app(settings: Settings | None = None, *, run_sweeper: bool = True) ->
     assistant = Assistant(assist_service, settings.anthropic_api_key)
     staff_service = StaffService(settings.signing_secret, settings.sms_provider)
     ops = StoreOps(cart_service, realtime.publish)
+    guard = CartGuard(cart_service, realtime.publish, settings.device_secret)
+    checkout.bag_check = guard.bag_check
     realtime.attach(verifier, maker, cart_service)
 
     @contextlib.asynccontextmanager
@@ -102,6 +105,7 @@ def create_app(settings: Settings | None = None, *, run_sweeper: bool = True) ->
     api.state.assistant = assistant
     api.state.staff = staff_service
     api.state.ops = ops
+    api.state.guard = guard
     api.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origin_list,
@@ -129,6 +133,9 @@ def create_app(settings: Settings | None = None, *, run_sweeper: bool = True) ->
         assist.catalog_router,
         offers.router,
         offers.admin_router,
+        security.hw_router,
+        security.floor_router,
+        security.manager_router,
         staff.auth_router,
         staff.shopper_router,
         staff.floor_router,

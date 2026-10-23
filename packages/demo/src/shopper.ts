@@ -31,6 +31,7 @@ import { Deals, type DemoOffer } from "./deals.js";
 import { DemoApiError } from "./errors.js";
 import { browse, retrieve, routeList, rulesAnswer, search } from "./find.js";
 import { sections } from "./sections.js";
+import { Guard, type GuardSession } from "./guard.js";
 import { exitCode, gstIncluded } from "./money.js";
 import { DEMO_LOGINS, StoreTeam, type Caller } from "./team.js";
 import type { DemoProduct } from "./types.js";
@@ -54,7 +55,9 @@ export type BridgeMessage =
   /** The dashboard's offers, sent when a manager changes one and with each hello. */
   | { kind: "offers"; offers: DemoOffer[] }
   /** A search in the app, so the dashboard's Reports count it (spoken ones too). */
-  | { kind: "search"; query: string; source: "search" | "voice" | "list" | "assistant"; resultCount: number };
+  | { kind: "search"; query: string; source: "search" | "voice" | "list" | "assistant"; resultCount: number }
+  /** Carts a manager took out of service on the dashboard's Cart fleet page, sent with each hello. */
+  | { kind: "fleet"; maintenance: string[] };
 
 export type BridgeSession = {
   sessionId: string;
@@ -125,6 +128,20 @@ export class ShopperDemo {
   private dashboardSeenAt = 0;
   readonly team: StoreTeam;
   readonly deals = new Deals();
+  /** This tab's carts: weighed here, and their alerts sent to the dashboard demo. */
+  readonly guard = new Guard({
+    storeId: STORE_ID,
+    sessionFor: (code) => this.guardSession(code),
+    weighs: (code) => this.guardSession(code) !== null,
+    emit: (e) => {
+      if (e.type === "cart.weight_check") {
+        const s = this.sessions.get(e.data.sessionId);
+        if (s) this.listeners.get(s.sessionId)?.forEach((l) => l(e));
+      }
+      this.broadcast(e);
+    },
+  });
+  private sensing: ReturnType<typeof setInterval> | null = null;
 
   constructor() {
     if (typeof BroadcastChannel !== "undefined") {
@@ -220,6 +237,15 @@ export class ShopperDemo {
       this.updateHelp(h, action === "resolve" ? "resolved" : "acknowledged", false);
       return this.wireHelp(h);
     }
+    if (route("GET", /^\/staff\/v1\/stores\/[^/]+\/security-alerts$/)) {
+      this.staffOnly(caller);
+      return { storeId: STORE_ID, alerts: this.guard.list(url.searchParams.get("openOnly") !== "false") };
+    }
+    if ((match = route("POST", /^\/staff\/v1\/stores\/[^/]+\/security-alerts\/([^/]+)$/))) {
+      this.staffOnly(caller);
+      const b = body as { action: string; note?: string | null };
+      return this.guard.act(match[1]!, b.action, b.note?.trim() || null, user.name);
+    }
     if (route("POST", /^\/staff\/v1\/stores\/[^/]+\/exit-checks$/)) {
       this.staffOnly(caller);
       return this.exitCheck(String((body as { code?: string }).code ?? ""));
@@ -307,6 +333,7 @@ export class ShopperDemo {
       throw new DemoApiError(409, "already_shopping");
     }
     if ([...this.sessions.values()].some((s) => s.cartCode === code)) throw new DemoApiError(409, "cart_in_use");
+    if (this.guard.inMaintenance(code)) throw new DemoApiError(409, "cart_in_maintenance");
     const s: Session = {
       sessionId: uuid(),
       cartCode: code,
@@ -320,6 +347,7 @@ export class ShopperDemo {
       seen: new Set(),
     };
     this.sessions.set(s.sessionId, s);
+    this.sensing ??= setInterval(() => this.sense(), 3_000);
     this.broadcast(
       this.event("cart.session_started", code, "phone", { sessionId: s.sessionId, cartCode: code, userId: user.id }),
       user.name,
@@ -333,6 +361,11 @@ export class ShopperDemo {
     if (!p) throw new DemoApiError(404, "product_not_found");
     if (s.seen.has(requestId)) return { line: this.line(p, s.lines.get(p.productId) ?? 0), totals: this.totals(s) };
     s.seen.add(requestId);
+    // Simulated scale: an item put in unscanned is usually the next thing the shopper scans.
+    if (this.guard.unscannedG(s.cartCode) > 0) {
+      this.guard.setUnscanned(s.cartCode, 0);
+      setTimeout(() => this.guard.sense(s.cartCode), 800);
+    }
     s.lines.set(p.productId, (s.lines.get(p.productId) ?? 0) + qty);
     s.lastAisle = p.aisle;
     this.reserved.set(p.productId, this.reserved.get(p.productId)! + qty);
@@ -440,6 +473,11 @@ export class ShopperDemo {
     }
     this.push(s, this.event("cart.session_ended", s.cartCode, reason === "paid" ? "system" : "phone", { sessionId: s.sessionId, reason }));
     this.sessions.delete(s.sessionId);
+    this.guard.sense(s.cartCode);
+    if (this.sessions.size === 0 && this.sensing) {
+      clearInterval(this.sensing);
+      this.sensing = null;
+    }
   }
 
   // ---- floor help -----------------------------------------------------------------------------
@@ -523,6 +561,10 @@ export class ShopperDemo {
     }
     if (msg.kind === "staff") return this.team.adopt(msg.account, msg.password);
     if (msg.kind === "offers") return this.deals.adopt(msg.offers);
+    if (msg.kind === "fleet") return this.guard.setMaintenance(msg.maintenance);
+    if (msg.kind === "event" && (msg.event.type === "security.alert" || msg.event.type === "security.updated")) {
+      return this.guard.mirror(msg.event.data);
+    }
     if (msg.kind !== "event" || msg.event.type !== "help.updated") return;
     const evt = msg.event;
     const h = this.help.find((x) => x.id === evt.data.id);
@@ -608,7 +650,36 @@ export class ShopperDemo {
     if (!order) return { result: "not_found", order: null };
     const result = order.exitUsedAt ? "already_used" : "ok";
     order.exitUsedAt ??= new Date().toISOString();
-    return { result, order: this.publicOrder(order) };
+    const bagCheck = result === "ok" ? this.guard.bagCheck(order.sessionId) : null;
+    return { result, order: this.publicOrder(order), bagCheck };
+  }
+
+  // ---- cart hardware (simulated) ----------------------------------------------------------------
+
+  /**
+   * Demo only: the shopper puts an item in the basket without scanning it, or takes it out again.
+   * The cart's load cell notices within a few seconds; staff are told if it stays that way.
+   */
+  simulateUnscanned(sessionId: string, inBasket: boolean) {
+    const s = this.sessions.get(sessionId);
+    if (!s) return;
+    this.guard.setUnscanned(s.cartCode, inBasket ? 450 : 0);
+    setTimeout(() => this.guard.sense(s.cartCode), 1_200);
+  }
+
+  /** Demo only: whether this cart's basket holds an unscanned item. */
+  unscannedIn(sessionId: string) {
+    const s = this.sessions.get(sessionId);
+    return s ? this.guard.unscannedG(s.cartCode) > 0 : false;
+  }
+
+  private sense() {
+    for (const s of this.sessions.values()) this.guard.sense(s.cartCode);
+  }
+
+  private guardSession(cartCode: string): GuardSession | null {
+    const s = [...this.sessions.values()].find((x) => x.cartCode === cartCode);
+    return s ? { sessionId: s.sessionId, cartCode: s.cartCode, shopperName: s.shopperName, startedAt: s.startedAt, lines: s.lines, lastAisle: s.lastAisle } : null;
   }
 
   private openSession(userId: string) {

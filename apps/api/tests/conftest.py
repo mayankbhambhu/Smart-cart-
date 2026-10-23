@@ -17,6 +17,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from smartcart.app import create_app
+from smartcart.cart_guard import CartGuard
 from smartcart.cart_service import CartService
 from smartcart.config import Settings
 from smartcart.models import Barcode, Cart, Inventory, Product
@@ -43,6 +44,7 @@ class Server:
     redis: Redis
     carts: CartService
     ops: StoreOps
+    guard: CartGuard
 
 
 @pytest.fixture(scope="session")
@@ -56,7 +58,9 @@ async def server() -> AsyncIterator[Server]:
         await asyncio.sleep(0.05)
     port = srv.servers[0].sockets[0].getsockname()[1]
     state = app.other_asgi_app.state
-    yield Server(f"http://127.0.0.1:{port}", state.sessionmaker, state.redis, state.carts, state.ops)
+    yield Server(
+        f"http://127.0.0.1:{port}", state.sessionmaker, state.redis, state.carts, state.ops, state.guard
+    )
     srv.should_exit = True
     await task
 

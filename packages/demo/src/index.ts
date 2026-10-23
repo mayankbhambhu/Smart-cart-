@@ -7,3 +7,4 @@ export * from "./errors.js";
 export * from "./team.js";
 export * from "./deals.js";
 export { sections } from "./sections.js";
+export * from "./guard.js";

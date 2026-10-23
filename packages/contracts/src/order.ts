@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { BagCheck } from "./security.js";
 import { CartLine, CartTotals } from "./cart.js";
 import { BasisPoints, CartCode, Paise, StoreId } from "./ids.js";
 
@@ -60,5 +61,7 @@ export const ExitCheckResponse = z.object({
   /** "ok": paid and first use. "already_used": paid but shown before. "not_paid" / "not_found" otherwise. */
   result: z.enum(["ok", "already_used", "not_paid", "not_found"]),
   order: Receipt.nullable(),
+  /** Milestone 7: set when the cart's weight didn't match its scans; staff check the bag. */
+  bagCheck: BagCheck.nullable().optional(),
 });
 export type ExitCheckResponse = z.infer<typeof ExitCheckResponse>;

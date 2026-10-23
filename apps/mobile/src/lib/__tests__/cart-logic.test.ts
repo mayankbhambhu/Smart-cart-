@@ -106,3 +106,10 @@ describe("floor help events", () => {
     expect(outcome).toEqual({ kind: "help", request });
   });
 });
+
+test("passes the cart's weight check on to the shopper, for their own cart only", () => {
+  const check = { ...envelope, source: "cart", type: "cart.weight_check", data: { sessionId: "s1", status: "extra", diffG: 450 } };
+  expect(applyEvent(cart, check as SmartCartEvent)).toEqual({ kind: "weight", status: "extra", diffG: 450 });
+  const other = { ...check, data: { ...check.data, sessionId: "zz" } };
+  expect(applyEvent(cart, other as SmartCartEvent)).toEqual({ kind: "ignore" });
+});

@@ -36,6 +36,12 @@ export function DemoBanner() {
           <button className={button} disabled={!store} onClick={() => store?.triggerLowStock()}>
             Trigger a low-stock alert
           </button>
+          <button className={button} disabled={!store} onClick={() => store?.triggerUnscanned()}>
+            Put an item in unscanned
+          </button>
+          <button className={button} disabled={!store} onClick={() => store?.triggerExitGate()}>
+            Cart at exit unpaid
+          </button>
           <button className={button} disabled={!store} onClick={() => store?.setPaused(!paused)}>
             {paused ? "Resume shoppers" : "Pause shoppers"}
           </button>

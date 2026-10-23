@@ -53,6 +53,13 @@ export default function ExitCheck() {
       <Button title="Check" busy={busy} disabled={code.trim().length < 6} onPress={() => void check()} />
       {error && <Text style={styles.error}>{error}</Text>}
       {verdict && <Text style={[styles.verdict, verdict.style]}>{verdict.text}</Text>}
+      {result?.bagCheck && (
+        <View style={styles.bag} accessibilityRole="alert">
+          <Text style={styles.bagTitle}>Please check the bag first</Text>
+          <Text style={styles.bagText}>{result.bagCheck.reason}</Text>
+          <Text style={styles.bagText}>Ask politely: it's often the shopper's own item. Close it under Carts to check.</Text>
+        </View>
+      )}
       {result?.order && (
         <View style={styles.card}>
           <Text style={styles.title}>
@@ -76,6 +83,9 @@ const styles = StyleSheet.create({
   ok: { color: colors.brand, backgroundColor: colors.brandSoft },
   warn: { color: "#92400E", backgroundColor: "#FEF3C7" },
   error: { color: colors.danger, backgroundColor: colors.dangerSoft, borderRadius: 10, padding: 10 },
+  bag: { backgroundColor: "#FEF3C7", borderColor: "#FCD34D", borderWidth: 1, borderRadius: 12, padding: 14, gap: 4 },
+  bagTitle: { fontSize: 16, fontWeight: "700", color: "#78350F" },
+  bagText: { color: "#78350F" },
   card: { backgroundColor: colors.surface, borderRadius: 14, padding: 14, borderWidth: 1, borderColor: colors.border, gap: 4 },
   title: { fontWeight: "700", color: colors.text },
   muted: { color: colors.muted },

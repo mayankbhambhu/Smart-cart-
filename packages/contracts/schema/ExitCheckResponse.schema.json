@@ -213,6 +213,28 @@
           "type": "null"
         }
       ]
+    },
+    "bagCheck": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "alertId": {
+              "type": "string"
+            },
+            "reason": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "alertId",
+            "reason"
+          ]
+        },
+        {
+          "type": "null"
+        }
+      ]
     }
   },
   "required": [

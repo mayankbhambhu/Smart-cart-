@@ -9,6 +9,8 @@ export type DemoProduct = {
   section: string;
   foodType: "veg" | "non_veg" | "egg" | "not_food" | null;
   gstRateBp: number;
+  /** Pack weight in grams, for the cart's weight check; null when the seed has none. */
+  weightG: number | null;
   pricePaise: number;
   mrpPaise: number;
   dietTags: string[];

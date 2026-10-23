@@ -1,4 +1,4 @@
-import type { CartSnapshot, CheckoutResponse } from "@smart-cart/contracts";
+import type { CartSnapshot, CheckoutResponse, WeightCheckStatus } from "@smart-cart/contracts";
 import * as Crypto from "expo-crypto";
 import { create } from "zustand";
 import { api, type LineChange } from "./api";
@@ -16,6 +16,8 @@ type CartState = {
   endedReason: string | null;
   /** The order paid for most recently, so the app can show its receipt. */
   paidOrderId: string | null;
+  /** The cart's last weight check, when it doesn't match what was scanned. Null while it matches. */
+  weight: { status: Exclude<WeightCheckStatus, "ok" | "unknown">; diffG: number | null } | null;
 
   resume: () => Promise<void>;
   pair: (cartCode: string, storeId: string) => Promise<void>;
@@ -40,7 +42,7 @@ let disconnect: (() => void) | null = null;
 export const useCart = create<CartState>((set, get) => {
   const open = (cart: CartSnapshot) => {
     disconnect?.();
-    set({ cart, live: false, endedReason: null });
+    set({ cart, live: false, endedReason: null, weight: null });
     useAssist.getState().setStoreId(cart.storeId);
     const session = useAuth.getState().session;
     if (!session) return;
@@ -54,6 +56,10 @@ export const useCart = create<CartState>((set, get) => {
         if (outcome.kind === "ended") close(outcome.reason);
         if (outcome.kind === "paid") get().markPaid(outcome.orderId);
         if (outcome.kind === "help") useAssist.getState().setHelp(outcome.request);
+        if (outcome.kind === "weight") {
+          const off = outcome.status === "extra" || outcome.status === "missing";
+          set({ weight: off ? { status: outcome.status as "extra" | "missing", diffG: outcome.diffG } : null });
+        }
       },
     });
   };
@@ -61,7 +67,7 @@ export const useCart = create<CartState>((set, get) => {
   const close = (reason: string) => {
     disconnect?.();
     disconnect = null;
-    set({ cart: null, live: false, endedReason: reason });
+    set({ cart: null, live: false, endedReason: reason, weight: null });
   };
 
   const setStatus = (status: CartSnapshot["status"]) => {
@@ -85,6 +91,7 @@ export const useCart = create<CartState>((set, get) => {
     live: false,
     endedReason: null,
     paidOrderId: null,
+    weight: null,
 
     resume: async () => {
       const cart = await api.myCart();
@@ -133,7 +140,7 @@ export const useCart = create<CartState>((set, get) => {
     reset: () => {
       disconnect?.();
       disconnect = null;
-      set({ cart: null, live: false, endedReason: null, paidOrderId: null });
+      set({ cart: null, live: false, endedReason: null, paidOrderId: null, weight: null });
     },
   };
 });

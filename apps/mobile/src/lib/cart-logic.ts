@@ -1,4 +1,4 @@
-import type { CartLine, CartSnapshot, CartTotals, HelpRequest, SmartCartEvent } from "@smart-cart/contracts";
+import type { CartLine, CartSnapshot, CartTotals, HelpRequest, SmartCartEvent, WeightCheckStatus } from "@smart-cart/contracts";
 
 /** Replaces, adds or removes one line, taking the server's totals as they are. */
 export function withLine(
@@ -18,6 +18,8 @@ export type CartEventOutcome =
   | { kind: "ended"; reason: string }
   | { kind: "paid"; orderId: string }
   | { kind: "help"; request: HelpRequest }
+  /** The cart's scale and the scanned items stopped (or started again) agreeing. */
+  | { kind: "weight"; status: WeightCheckStatus; diffG: number | null }
   | { kind: "ignore" };
 
 /** How a server event changes the shopper's cart. Pure, so it is easy to test. */
@@ -40,6 +42,9 @@ export function applyEvent(cart: CartSnapshot | null, event: SmartCartEvent): Ca
     case "help.requested":
     case "help.updated":
       return { kind: "help", request: event.data };
+    case "cart.weight_check":
+      if (!cart || event.data.sessionId !== cart.sessionId) return { kind: "ignore" };
+      return { kind: "weight", status: event.data.status, diffG: event.data.diffG };
     case "cart.session_ended":
       if (!cart || event.data.sessionId !== cart.sessionId) return { kind: "ignore" };
       return { kind: "ended", reason: event.data.reason };
