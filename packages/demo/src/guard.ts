@@ -188,6 +188,11 @@ export class Guard {
       .map((a) => ({ ...a }));
   }
 
+  /** Every alert this tab knows, for the Analytics page. */
+  all(): SecurityAlert[] {
+    return this.alerts.map((a) => ({ ...a }));
+  }
+
   /** POST .../security-alerts/{id}: staff acknowledge, resolve or mark a false alarm. */
   act(id: string, action: string, note: string | null, staffName: string): SecurityAlert {
     const a = this.alerts.find((x) => x.id === id);

@@ -3,7 +3,7 @@
 import type { SecurityAlert } from "@smart-cart/contracts";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
-import { apiPost, STORE_ID } from "@/lib/api";
+import { apiPost, DEMO, STORE_ID } from "@/lib/api";
 import { securityQuery } from "@/lib/queries";
 import { ago, alertAdvice, alertTitle, statusLabel } from "@/lib/security";
 
@@ -53,7 +53,7 @@ export default function SecurityPage() {
         <h1 className="text-xl font-semibold">Security</h1>
         <p className="max-w-3xl text-sm text-slate-500">
           Each cart weighs its basket and compares it with what was scanned. The shopper is asked in the app first; a
-          cart shows here only if it still doesn't match after 45 seconds, or rolls through the exit gate unpaid. These
+          cart shows here only if it still doesn't match after 45 seconds{DEMO && " (12 in this demo)"}, or rolls through the exit gate unpaid. These
           are checks, not accusations: you decide what happened.
         </p>
       </div>

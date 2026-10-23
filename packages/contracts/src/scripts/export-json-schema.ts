@@ -14,6 +14,7 @@ import {
 import { AddItemRequest, CartSnapshot, PairCartRequest } from "../cart.js";
 import { OfferCreateRequest, OffersResponse, StoreOffersResponse } from "../deals.js";
 import { FleetResponse, SecurityAlertsResponse, TelemetryRequest } from "../security.js";
+import { StoreAnalytics } from "../analytics.js";
 import { SmartCartEvent } from "../events.js";
 import { CheckoutResponse, ExitCheckResponse, Receipt } from "../order.js";
 import {
@@ -52,6 +53,7 @@ const schemas = {
   SecurityAlertsResponse,
   FleetResponse,
   TelemetryRequest,
+  StoreAnalytics,
   StaffLoginResponse,
   MeResponse,
   StaffAccount,

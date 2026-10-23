@@ -17,6 +17,7 @@ const links: { href: string; label: string; admin?: boolean }[] = [
   { href: "/security", label: "Security" },
   { href: "/fleet", label: "Cart fleet" },
   { href: "/tasks", label: "Staff and tasks" },
+  { href: "/analytics", label: "Analytics" },
   { href: "/insights", label: "Reports" },
   { href: "/staff", label: "Staff accounts" },
   { href: "/approvals", label: "Account approvals", admin: true },

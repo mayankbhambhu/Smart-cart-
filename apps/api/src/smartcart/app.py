@@ -24,7 +24,7 @@ from .db import make_engine, make_sessionmaker
 from .errors import ApiError
 from .payments import make_provider
 from .realtime import Realtime
-from .routes import admin, assist, carts, catalog, health, offers, orders, security, staff
+from .routes import admin, analytics, assist, carts, catalog, health, offers, orders, security, staff
 from .staff_service import StaffService
 from .store_ops import StoreOps
 
@@ -136,6 +136,7 @@ def create_app(settings: Settings | None = None, *, run_sweeper: bool = True) ->
         security.hw_router,
         security.floor_router,
         security.manager_router,
+        analytics.admin_router,
         staff.auth_router,
         staff.shopper_router,
         staff.floor_router,

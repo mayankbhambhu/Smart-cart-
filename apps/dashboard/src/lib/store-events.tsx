@@ -55,6 +55,7 @@ export function StoreEventsProvider({ children }: { children: ReactNode }) {
           break;
         case "order.paid":
           void queryClient.invalidateQueries({ queryKey: ["orders", STORE_ID] });
+          void queryClient.invalidateQueries({ queryKey: ["analytics", STORE_ID] });
           break;
         case "cart.item_added":
         case "cart.item_removed":

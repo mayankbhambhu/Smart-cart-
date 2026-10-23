@@ -26,6 +26,8 @@ import type { ActiveCart, InventoryItem, OrderRow, Totals } from "../api";
 import {
   browseResponse,
   catalog,
+  computeAnalytics,
+  sampleHistory,
   Deals,
   DEMO_APP_CARTS,
   DEMO_CHANNEL,
@@ -100,6 +102,8 @@ class DemoStore {
   private pausedListeners = new Set<(paused: boolean) => void>();
   private channel: BroadcastChannel | null = null;
   private appHelp = new Set<string>();
+  /** Two weeks of trading before the demo opened, for the Analytics page. Made on first use. */
+  private sample: ReturnType<typeof sampleHistory> | null = null;
   /** Food labels a manager corrected on the Inventory page. */
   private labels = new Map<string, Product["foodType"]>();
   paused = false;
@@ -184,6 +188,8 @@ class DemoStore {
         resolvedAt: new Date(at + (4 + (i % 5)) * 60_000).toISOString(),
       });
     }
+    // Every cart has checked in once by the time the page opens.
+    for (const cart of FLEET) this.guard.sense(cart);
     const waiting = [...this.sessions.values()][0];
     if (waiting) this.callHelp(waiting, "find_item", "Where is jeera?", false, Date.now() - 2 * 60_000);
 
@@ -326,6 +332,11 @@ class DemoStore {
       return { storeId: STORE, requests };
     }
     if (url.pathname === `/admin/v1/stores/${STORE}/insights`) return this.insights(Number(url.searchParams.get("days") ?? 7));
+    if (url.pathname === `/admin/v1/stores/${STORE}/analytics`) {
+      const days = Number(url.searchParams.get("days") ?? 7);
+      if (!Number.isInteger(days) || days < 1 || days > 90) throw new DemoApiError(400, "invalid_request");
+      return this.analytics(days);
+    }
     throw new DemoApiError(404, "not_available_in_demo", { path });
   }
 
@@ -667,6 +678,39 @@ class DemoStore {
         byAisle: count((h) => h.aisle),
       },
     };
+  }
+
+  private get history() {
+    this.sample ??= sampleHistory(Date.now(), 14, this.offerWindows());
+    return this.sample;
+  }
+
+  private offerWindows() {
+    return this.deals.all().map((o) => ({ ...o, startsAt: Date.parse(o.startsAt), endsAt: Date.parse(o.endedAt ?? o.endsAt) }));
+  }
+
+  /** The same numbers the API computes in Python, from the sample history plus this session's shoppers. */
+  private analytics(days: number) {
+    const now = Date.now();
+    const live = this.orders
+      .filter((o) => Date.parse(o.createdAt) > now - 15 * 86_400_000)
+      .map((o) => {
+        const lines = this.receipt(o).lines.map((l) => ({ productId: l.productId, qty: l.qty, unitPaise: l.unitPricePaise }));
+        return { startedAt: Date.parse(o.session.startedAt), paidAt: Date.parse(o.createdAt), totalPaise: o.totalPaise, lines };
+      });
+    const since = now - days * 86_400_000;
+    const liveScans = [...this.orders.map((o) => o.session), ...this.sessions.values()]
+      .filter((s) => Date.parse(s.startedAt) >= since)
+      .flatMap((s) => [...s.lines.keys()].map((id) => byId.get(id)?.aisle ?? null))
+      .filter((a): a is string => !!a);
+    const historyScans = this.history.scans.filter((s) => s.at >= since).map((s) => s.aisle);
+    const offers = [...this.history.offers, ...this.offerWindows()];
+    return computeAnalytics(STORE, days, now, [...this.history.orders, ...live], offers, {
+      scans: [...historyScans, ...liveScans],
+      helpAisles: this.help.filter((h) => Date.parse(h.createdAt) >= since).map((h) => h.aisle),
+      searches: this.searchLog.filter((l) => l.at >= since).map((l) => [l.source, l.resultCount]),
+      alerts: this.guard.all().filter((a) => Date.parse(a.createdAt) >= since).map((a) => [a.kind, a.status]),
+    });
   }
 
   private receipt(o: DemoOrder): Receipt {

@@ -6,3 +6,4 @@ export * from "./assist.js";
 export * from "./store.js";
 export * from "./deals.js";
 export * from "./security.js";
+export * from "./analytics.js";
