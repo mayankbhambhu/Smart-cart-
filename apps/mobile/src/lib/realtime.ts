@@ -1,5 +1,4 @@
 import type { SmartCartEvent } from "@smart-cart/contracts";
-import { AppState } from "react-native";
 import { io, type Socket } from "socket.io-client";
 import { API_URL, DEMO } from "./config";
 import { demo } from "./demo";
@@ -8,12 +7,16 @@ import { demo } from "./demo";
  * Opens the Socket.IO connection for one cart session. On every (re)connect it joins the cart
  * room and the server replies with a full cart.snapshot, so the app never drifts from the
  * server after a dropped connection. Returns a function that closes it.
+ *
+ * `onForeground` lets the app say when it returns to the foreground (the app passes React Native's
+ * AppState; the Node smoke test has none), so it can reconnect at once instead of on the next backoff.
  */
 export function connectCart(opts: {
   token: string;
   sessionId: string;
   onEvent: (e: SmartCartEvent) => void;
   onLive: (live: boolean) => void;
+  onForeground?: (reconnect: () => void) => () => void;
 }): () => void {
   if (DEMO) return demo().connect(opts.sessionId, opts.onEvent, opts.onLive);
   const socket: Socket = io(API_URL, {
@@ -35,11 +38,11 @@ export function connectCart(opts: {
   socket.on("event", opts.onEvent);
   // Phones drop sockets while the app is in the background; reconnect as soon as it's back, without
   // waiting for the next backoff step. The join on connect brings a fresh snapshot.
-  const foreground = AppState.addEventListener("change", (state) => {
-    if (state === "active" && !socket.connected) socket.connect();
+  const stopWatching = opts.onForeground?.(() => {
+    if (!socket.connected) socket.connect();
   });
   return () => {
-    foreground.remove();
+    stopWatching?.();
     socket.removeAllListeners();
     socket.disconnect();
   };

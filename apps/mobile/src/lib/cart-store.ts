@@ -1,5 +1,6 @@
 import type { CartSnapshot, CheckoutResponse, WeightCheckStatus } from "@smart-cart/contracts";
 import * as Crypto from "expo-crypto";
+import { AppState } from "react-native";
 import { create } from "zustand";
 import { api, type LineChange } from "./api";
 import { tokenFor, useAuth } from "./auth-store";
@@ -53,6 +54,10 @@ export const useCart = create<CartState>((set, get) => {
       token: tokenFor(session),
       sessionId: cart.sessionId,
       onLive: (live) => set({ live }),
+      onForeground: (reconnect) => {
+        const sub = AppState.addEventListener("change", (state) => state === "active" && reconnect());
+        return () => sub.remove();
+      },
       onEvent: (event) => {
         const outcome = applyEvent(get().cart, event);
         if (outcome.kind === "cart") set({ cart: outcome.cart });
